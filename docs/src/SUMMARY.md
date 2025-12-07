@@ -16,6 +16,8 @@
 - [Services](./sdk/services.md)
   - [Database](./sdk/services/database.md)
   - [Redis](./sdk/services/redis.md)
+  - [FTP/SFTP](./sdk/services/ftp.md)
+  - [Email](./sdk/services/email.md)
 
 # Examples
 

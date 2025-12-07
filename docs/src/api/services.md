@@ -71,6 +71,8 @@ Content-Type: application/json
 | `mongodb` | MongoDB document database |
 | `minio` | MinIO/S3 object storage |
 | `memcached` | Memcached cache |
+| `ftp` | FTP/FTPS/SFTP file transfer |
+| `email` | SMTP email sending |
 
 **Response:**
 
@@ -228,3 +230,36 @@ POST /api/services/{id}/test
 }
 ```
 
+### FTP/SFTP
+
+```json
+{
+  "service_type": "ftp",
+  "config": {
+    "host": "sftp.example.com",
+    "port": 22,
+    "username": "user",
+    "password": "secret",
+    "protocol": "sftp",
+    "base_path": "/uploads",
+    "timeout_seconds": 30
+  }
+}
+```
+
+### Email (SMTP)
+
+```json
+{
+  "service_type": "email",
+  "config": {
+    "host": "smtp.example.com",
+    "port": 587,
+    "username": "sender@example.com",
+    "password": "app-password",
+    "encryption": "starttls",
+    "from_address": "noreply@example.com",
+    "from_name": "My App"
+  }
+}
+```
