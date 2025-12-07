@@ -1,0 +1,14 @@
+[package]
+name = "edge-hive-sdk"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+description = "SDK for writing Edge Hive handlers"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+bytes = { workspace = true }
+
+[dev-dependencies]

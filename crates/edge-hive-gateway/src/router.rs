@@ -1,0 +1,133 @@
+//! Gateway router - routes HTTP requests to worker processes
+
+use axum::{
+    body::Body,
+    extract::State,
+    http::{Request, StatusCode},
+    response::{IntoResponse, Response},
+    routing::any,
+    Router,
+};
+use std::sync::Arc;
+use std::time::Duration;
+use uuid::Uuid;
+
+use crate::AppState;
+
+/// Create the gateway router that handles all incoming requests
+pub fn create_gateway_router(_state: Arc<AppState>) -> Router<Arc<AppState>> {
+    Router::new()
+        .route("/{*path}", any(handle_gateway_request))
+        .route("/", any(handle_gateway_request))
+}
+
+/// Handle an incoming gateway request
+async fn handle_gateway_request(
+    State(state): State<Arc<AppState>>,
+    request: Request<Body>,
+) -> Response {
+    let method = request.method().to_string();
+    let path = request.uri().path().to_string();
+    let request_id = Uuid::new_v4().to_string();
+
+    // Extract domain from Host header (strip port if present)
+    let host = request.headers()
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("localhost");
+    let domain = host.split(':').next().unwrap_or(host);
+    
+    tracing::debug!(
+        request_id = %request_id,
+        domain = %domain,
+        method = %method,
+        path = %path,
+        "Incoming request"
+    );
+    
+    // Find the endpoint for this request
+    let endpoint = match state.db.find_endpoint(domain, &path, &method) {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            tracing::debug!("No endpoint found for {} {} {}", domain, method, path);
+            return (StatusCode::NOT_FOUND, "Not Found").into_response();
+        }
+        Err(e) => {
+            tracing::error!("Database error: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error").into_response();
+        }
+    };
+    
+    // Check if endpoint is compiled
+    if !endpoint.compiled {
+        return (StatusCode::SERVICE_UNAVAILABLE, "Endpoint not compiled").into_response();
+    }
+    
+    // Build the SDK request
+    let query: std::collections::HashMap<String, String> = request.uri()
+        .query()
+        .map(|q| {
+            url::form_urlencoded::parse(q.as_bytes())
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    
+    let headers: std::collections::HashMap<String, String> = request.headers()
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+        .collect();
+    
+    // Get body
+    let body_bytes = match axum::body::to_bytes(request.into_body(), 1024 * 1024).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!("Failed to read body: {}", e);
+            return (StatusCode::BAD_REQUEST, "Failed to read body").into_response();
+        }
+    };
+    
+    let body = if body_bytes.is_empty() {
+        None
+    } else {
+        Some(String::from_utf8_lossy(&body_bytes).to_string())
+    };
+    
+    let sdk_request = edge_hive_sdk::Request {
+        method: method.clone(),
+        path: path.clone(),
+        query,
+        headers,
+        body,
+        params: std::collections::HashMap::new(), // TODO: extract path params
+        client_ip: None, // TODO: extract from X-Forwarded-For
+        request_id: request_id.clone(),
+    };
+    
+    // Send to worker
+    let timeout = Duration::from_secs(state.config.handler_timeout_secs);
+    let response = {
+        let mut workers = state.workers.write().await;
+        workers.handle_request(&endpoint.id, &sdk_request, timeout)
+    };
+    
+    match response {
+        Ok(sdk_response) => {
+            let mut builder = Response::builder()
+                .status(StatusCode::from_u16(sdk_response.status).unwrap_or(StatusCode::OK));
+            
+            for (key, value) in sdk_response.headers {
+                builder = builder.header(&key, &value);
+            }
+            
+            match builder.body(Body::from(sdk_response.body.unwrap_or_default())) {
+                Ok(response) => response,
+                Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response(),
+            }
+        }
+        Err(e) => {
+            tracing::error!(request_id = %request_id, "Worker error: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Handler error: {}", e)).into_response()
+        }
+    }
+}

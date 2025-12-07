@@ -1,0 +1,16 @@
+[package]
+name = "c88d645f-98bd-4b05-b129-e43e56dce188"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+edge-hive-sdk = { path = "../../crates/edge-hive-sdk" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

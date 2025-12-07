@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge Hive Admin</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        :root { --pico-font-size: 16px; }
+        .editor-container { height: 400px; border: 1px solid var(--pico-muted-border-color); }
+        .status-badge { padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+        .status-enabled { background: #22c55e; color: white; }
+        .status-disabled { background: #6b7280; color: white; }
+        .status-uncompiled { background: #f59e0b; color: white; }
+        nav { margin-bottom: 2rem; }
+        .endpoint-list { margin-bottom: 2rem; }
+        .endpoint-card { margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: 8px; }
+        .endpoint-header { display: flex; justify-content: space-between; align-items: center; }
+        .endpoint-route { font-family: monospace; background: var(--pico-code-background-color); padding: 0.25rem 0.5rem; border-radius: 4px; }
+        .btn-group button { margin-right: 0.5rem; }
+        .error { color: #ef4444; }
+        .success { color: #22c55e; }
+    </style>
+</head>
+<body>
+    <main class="container" x-data="app()">
+        <nav>
+            <ul><li><strong>🐝 Edge Hive</strong></li></ul>
+            <ul>
+                <li><a href="#" @click.prevent="view = 'list'">Endpoints</a></li>
+                <li><a href="/docs" target="_blank">Docs</a></li>
+            </ul>
+        </nav>
+
+        <!-- Endpoint List View -->
+        <template x-if="view === 'list'">
+            <div>
+                <header>
+                    <h1>Endpoints</h1>
+                    <button @click="newEndpoint()">+ New Endpoint</button>
+                </header>
+                
+                <div x-show="loading">Loading...</div>
+                
+                <div class="endpoint-list">
+                    <template x-for="ep in endpoints" :key="ep.id">
+                        <article class="endpoint-card">
+                            <div class="endpoint-header">
+                                <div>
+                                    <strong x-text="ep.name"></strong>
+                                    <span class="endpoint-route" x-text="`${ep.method} ${ep.domain}${ep.path}`"></span>
+                                    <span class="status-badge" 
+                                          :class="ep.enabled ? 'status-enabled' : (ep.compiled ? 'status-disabled' : 'status-uncompiled')"
+                                          x-text="ep.enabled ? 'Running' : (ep.compiled ? 'Stopped' : 'Not Compiled')"></span>
+                                </div>
+                                <div class="btn-group">
+                                    <button class="outline" @click="editEndpoint(ep)">Edit</button>
+                                    <button class="outline" @click="deleteEndpoint(ep.id)">Delete</button>
+                                </div>
+                            </div>
+                        </article>
+                    </template>
+                </div>
+            </div>
+        </template>
+
+        <!-- Endpoint Editor View -->
+        <template x-if="view === 'editor'">
+            <div>
+                <header>
+                    <a href="#" @click.prevent="view = 'list'">&larr; Back</a>
+                    <h1 x-text="current.id ? 'Edit Endpoint' : 'New Endpoint'"></h1>
+                </header>
+                
+                <form @submit.prevent="saveEndpoint()">
+                    <div class="grid">
+                        <label>Name <input type="text" x-model="current.name" required></label>
+                        <label>Domain <input type="text" x-model="current.domain" placeholder="api.example.com" required></label>
+                    </div>
+                    <div class="grid">
+                        <label>Path <input type="text" x-model="current.path" placeholder="/hello" required></label>
+                        <label>Method
+                            <select x-model="current.method">
+                                <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option><option>PATCH</option>
+                            </select>
+                        </label>
+                    </div>
+                    
+                    <label>Handler Code (Rust)</label>
+                    <div class="editor-container" id="editor"></div>
+                    
+                    <div class="grid" style="margin-top: 1rem;">
+                        <button type="submit">Save</button>
+                        <button type="button" class="outline" @click="compileEndpoint()" :disabled="!current.id">Compile</button>
+                        <button type="button" class="outline" @click="toggleEndpoint()" :disabled="!current.compiled"
+                                x-text="current.enabled ? 'Stop' : 'Start'"></button>
+                    </div>
+                </form>
+                
+                <p x-show="message" :class="messageType" x-text="message"></p>
+            </div>
+        </template>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
