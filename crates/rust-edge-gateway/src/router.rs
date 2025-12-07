@@ -93,7 +93,7 @@ async fn handle_gateway_request(
         Some(String::from_utf8_lossy(&body_bytes).to_string())
     };
     
-    let sdk_request = edge_hive_sdk::Request {
+    let sdk_request = rust_edge_gateway_sdk::Request {
         method: method.clone(),
         path: path.clone(),
         query,

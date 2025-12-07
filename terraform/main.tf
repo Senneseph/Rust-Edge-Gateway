@@ -19,9 +19,9 @@ variable "ssh_key_fingerprint" {
 }
 
 variable "domain" {
-  description = "Domain for Edge Hive"
+  description = "Domain for Rust Edge Gateway"
   type        = string
-  default     = "edge-hive.iffuso.com"
+  default     = "rust-edge-gateway.iffuso.com"
 }
 
 variable "droplet_ip" {
@@ -34,28 +34,28 @@ provider "digitalocean" {
   token = var.do_token
 }
 
-# DNS Records for Edge Hive
-resource "digitalocean_record" "edge_hive" {
+# DNS Records for Rust Edge Gateway
+resource "digitalocean_record" "rust_edge_gateway" {
   count  = var.droplet_ip != "" ? 1 : 0
   domain = "iffuso.com"
   type   = "A"
-  name   = "edge-hive"
+  name   = "rust-edge-gateway"
   value  = var.droplet_ip
   ttl    = 3600
 }
 
-resource "digitalocean_record" "edge_hive_wildcard" {
+resource "digitalocean_record" "rust_edge_gateway_wildcard" {
   count  = var.droplet_ip != "" ? 1 : 0
   domain = "iffuso.com"
   type   = "A"
-  name   = "*.edge-hive"
+  name   = "*.rust-edge-gateway"
   value  = var.droplet_ip
   ttl    = 3600
 }
 
-# Firewall rules for Edge Hive
-resource "digitalocean_firewall" "edge_hive" {
-  name = "edge-hive-fw"
+# Firewall rules for Rust Edge Gateway
+resource "digitalocean_firewall" "rust_edge_gateway" {
+  name = "rust-edge-gateway-fw"
 
   # Allow SSH
   inbound_rule {
@@ -92,7 +92,7 @@ resource "digitalocean_firewall" "edge_hive" {
   }
 }
 
-output "edge_hive_domain" {
+output "rust_edge_gateway_domain" {
   value = var.domain
 }
 

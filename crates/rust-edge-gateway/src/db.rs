@@ -43,7 +43,7 @@ impl Database {
     /// Create a new database connection
     pub fn new(data_dir: &Path) -> Result<Self> {
         std::fs::create_dir_all(data_dir)?;
-        let db_path = data_dir.join("edge_hive.db");
+        let db_path = data_dir.join("rust_edge_gateway.db");
         let conn = Connection::open(&db_path)
             .with_context(|| format!("Failed to open database at {:?}", db_path))?;
         

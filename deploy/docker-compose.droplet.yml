@@ -1,9 +1,13 @@
 version: '3.8'
 
+# Rust Edge Gateway - Droplet Deployment
+# Use either local image (rust-edge-gateway:latest) or Docker Hub image
+# Set DOCKER_IMAGE env var to override: senneseph/rust-edge-gateway:latest
+
 services:
-  edge-hive:
-    image: edge-hive:latest
-    container_name: edge-hive
+  rust-edge-gateway:
+    image: ${DOCKER_IMAGE:-rust-edge-gateway:latest}
+    container_name: rust-edge-gateway
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"   # Gateway (nginx proxies to this)
@@ -12,12 +16,12 @@ services:
       - ./data:/app/data
       - ./handlers:/app/handlers
       - ./static:/app/static
-      - ./crates/edge-hive-sdk:/app/crates/edge-hive-sdk
+      - ./crates/rust-edge-gateway-sdk:/app/crates/rust-edge-gateway-sdk
     environment:
-      - RUST_LOG=info,edge_hive_gateway=debug
-      - EDGE_HIVE_DATA_DIR=/app/data
-      - EDGE_HIVE_HANDLERS_DIR=/app/handlers
-      - EDGE_HIVE_STATIC_DIR=/app/static
+      - RUST_LOG=info,rust_edge_gateway=debug
+      - RUST_EDGE_GATEWAY_DATA_DIR=/app/data
+      - RUST_EDGE_GATEWAY_HANDLERS_DIR=/app/handlers
+      - RUST_EDGE_GATEWAY_STATIC_DIR=/app/static
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/api/health"]
       interval: 30s

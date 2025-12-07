@@ -1,16 +1,16 @@
 [package]
-name = "edge-hive-gateway"
+name = "rust-edge-gateway"
 version.workspace = true
 edition = "2021"
 license.workspace = true
-description = "Edge Hive Gateway and Worker Supervisor"
+description = "Rust Edge Gateway and Worker Supervisor"
 
 [[bin]]
-name = "edge-hive"
+name = "rust-edge-gateway"
 path = "src/main.rs"
 
 [dependencies]
-edge-hive-sdk = { path = "../edge-hive-sdk" }
+rust-edge-gateway-sdk = { path = "../rust-edge-gateway-sdk" }
 tokio = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }

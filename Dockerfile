@@ -1,4 +1,4 @@
-# Edge Gateway - Production Container with Rust Toolchain
+# Rust Edge Gateway - Production Container with Rust Toolchain
 # Includes Rust for handler compilation at runtime
 FROM rust:1.83-slim-bookworm
 
@@ -17,7 +17,7 @@ WORKDIR /app
 COPY . .
 
 # Build the release binary
-RUN cargo build --release --bin edge-hive
+RUN cargo build --release --bin rust-edge-gateway
 
 # Expose ports
 # 8080 - Main gateway
@@ -25,5 +25,5 @@ RUN cargo build --release --bin edge-hive
 EXPOSE 8080 8081
 
 # Run the pre-built binary
-CMD ["./target/release/edge-hive"]
+CMD ["./target/release/rust-edge-gateway"]
 
