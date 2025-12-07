@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  edge-hive:
+    image: edge-hive:latest
+    container_name: edge-hive
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"   # Gateway (nginx proxies to this)
+      - "127.0.0.1:8081:8081"   # Admin UI (nginx proxies to this)
+    volumes:
+      - ./data:/app/data
+      - ./handlers:/app/handlers
+      - ./static:/app/static
+      - ./crates/edge-hive-sdk:/app/crates/edge-hive-sdk
+    environment:
+      - RUST_LOG=info,edge_hive_gateway=debug
+      - EDGE_HIVE_DATA_DIR=/app/data
+      - EDGE_HIVE_HANDLERS_DIR=/app/handlers
+      - EDGE_HIVE_STATIC_DIR=/app/static
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
