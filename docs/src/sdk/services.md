@@ -17,6 +17,8 @@ Services are configured in the gateway admin UI and made available to handlers. 
 | **MongoDB** | Document database | Flexible schemas, JSON data |
 | **MinIO** | S3-compatible object storage | File uploads, media storage |
 | **Memcached** | Distributed caching | High-speed key-value caching |
+| **FTP/SFTP** | File transfer protocols | File uploads, vendor integrations |
+| **Email** | SMTP email sending | Notifications, alerts, reports |
 
 ## Configuring Services
 
@@ -148,4 +150,5 @@ This allows the same endpoint code to use different service instances in differe
 
 - [Database Service Details](./services/database.md)
 - [Redis Service Details](./services/redis.md)
-
+- [FTP/SFTP Service Details](./services/ftp.md)
+- [Email Service Details](./services/email.md)

@@ -107,6 +107,8 @@ pub enum ServiceType {
     Redis,
     Memcached,
     Mongodb,
+    Ftp,
+    Email,
 }
 
 impl std::fmt::Display for ServiceType {
@@ -119,6 +121,8 @@ impl std::fmt::Display for ServiceType {
             ServiceType::Redis => write!(f, "redis"),
             ServiceType::Memcached => write!(f, "memcached"),
             ServiceType::Mongodb => write!(f, "mongodb"),
+            ServiceType::Ftp => write!(f, "ftp"),
+            ServiceType::Email => write!(f, "email"),
         }
     }
 }
@@ -134,6 +138,8 @@ impl std::str::FromStr for ServiceType {
             "redis" => Ok(ServiceType::Redis),
             "memcached" => Ok(ServiceType::Memcached),
             "mongodb" => Ok(ServiceType::Mongodb),
+            "ftp" | "sftp" | "ftps" => Ok(ServiceType::Ftp),
+            "email" | "smtp" => Ok(ServiceType::Email),
             _ => Err(format!("Unknown service type: {}", s)),
         }
     }
