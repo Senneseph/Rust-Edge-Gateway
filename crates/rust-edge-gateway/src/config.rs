@@ -35,36 +35,36 @@ impl AppConfig {
     /// Load configuration from environment variables
     pub fn from_env() -> Self {
         Self {
-            data_dir: env::var("EDGE_HIVE_DATA_DIR")
+            data_dir: env::var("RUST_EDGE_GATEWAY_DATA_DIR")
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from("./data")),
-            
-            handlers_dir: env::var("EDGE_HIVE_HANDLERS_DIR")
+
+            handlers_dir: env::var("RUST_EDGE_GATEWAY_HANDLERS_DIR")
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from("./handlers")),
-            
-            static_dir: env::var("EDGE_HIVE_STATIC_DIR")
+
+            static_dir: env::var("RUST_EDGE_GATEWAY_STATIC_DIR")
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from("./static")),
-            
-            gateway_port: env::var("EDGE_HIVE_GATEWAY_PORT")
+
+            gateway_port: env::var("RUST_EDGE_GATEWAY_GATEWAY_PORT")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(8080),
-            
-            admin_port: env::var("EDGE_HIVE_ADMIN_PORT")
+
+            admin_port: env::var("RUST_EDGE_GATEWAY_ADMIN_PORT")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(8081),
-            
-            admin_api_key: env::var("EDGE_HIVE_ADMIN_API_KEY").ok(),
-            
-            handler_timeout_secs: env::var("EDGE_HIVE_HANDLER_TIMEOUT_SECS")
+
+            admin_api_key: env::var("RUST_EDGE_GATEWAY_ADMIN_API_KEY").ok(),
+
+            handler_timeout_secs: env::var("RUST_EDGE_GATEWAY_HANDLER_TIMEOUT_SECS")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(30),
-            
-            handler_max_memory_mb: env::var("EDGE_HIVE_HANDLER_MAX_MEMORY_MB")
+
+            handler_max_memory_mb: env::var("RUST_EDGE_GATEWAY_HANDLER_MAX_MEMORY_MB")
                 .ok()
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(64),

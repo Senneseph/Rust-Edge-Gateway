@@ -1,11 +1,11 @@
 version: '3.8'
 
 services:
-  edge-hive:
+  rust-edge-gateway:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: edge-hive
+    container_name: rust-edge-gateway
     ports:
       - "9080:8080"   # Gateway
       - "9081:8081"   # Admin UI
@@ -20,10 +20,10 @@ services:
       - cargo-git:/usr/local/cargo/git
       - target-cache:/app/target
     environment:
-      - RUST_LOG=info,edge_hive_gateway=debug
-      - EDGE_HIVE_DATA_DIR=/app/data
-      - EDGE_HIVE_HANDLERS_DIR=/app/handlers
-      - EDGE_HIVE_STATIC_DIR=/app/static
+      - RUST_LOG=info,rust_edge_gateway=debug
+      - RUST_EDGE_GATEWAY_DATA_DIR=/app/data
+      - RUST_EDGE_GATEWAY_HANDLERS_DIR=/app/handlers
+      - RUST_EDGE_GATEWAY_STATIC_DIR=/app/static
     env_file:
       - .env
     restart: unless-stopped

@@ -1,15 +1,15 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/edge-hive-sdk",
-    "crates/edge-hive-gateway",
+    "crates/rust-edge-gateway-sdk",
+    "crates/rust-edge-gateway",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-authors = ["Edge Hive Team"]
+authors = ["Rust Edge Gateway Team"]
 
 [workspace.dependencies]
 # Async runtime

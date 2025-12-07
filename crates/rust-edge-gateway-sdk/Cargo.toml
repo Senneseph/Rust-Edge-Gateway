@@ -1,9 +1,9 @@
 [package]
-name = "edge-hive-sdk"
+name = "rust-edge-gateway-sdk"
 version.workspace = true
 edition = "2021"
 license.workspace = true
-description = "SDK for writing Edge Hive handlers"
+description = "SDK for writing Rust Edge Gateway handlers"
 
 [dependencies]
 serde = { workspace = true }

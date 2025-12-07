@@ -1,4 +1,4 @@
-//! Edge Hive Gateway - Main entry point
+//! Rust Edge Gateway - Main entry point
 //!
 //! This is the main server that:
 //! - Routes HTTP requests to worker processes
@@ -43,11 +43,11 @@ async fn main() -> Result<()> {
     // Initialize tracing
     tracing_subscriber::registry()
         .with(tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "info,edge_hive_gateway=debug".into()))
+            .unwrap_or_else(|_| "info,rust_edge_gateway=debug".into()))
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    tracing::info!("Starting Edge Hive Gateway");
+    tracing::info!("Starting Rust Edge Gateway");
 
     // Load configuration
     let config = AppConfig::from_env();

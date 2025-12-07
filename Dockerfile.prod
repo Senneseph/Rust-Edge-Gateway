@@ -1,4 +1,4 @@
-# Edge Hive Platform - Production Multi-Stage Build
+# Rust Edge Gateway Platform - Production Multi-Stage Build
 # Stage 1: Build
 FROM rust:1.83-slim-bookworm AS builder
 
@@ -14,7 +14,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 
 # Build release binary
-RUN cargo build --release --bin edge-hive
+RUN cargo build --release --bin rust-edge-gateway
 
 # Stage 2: Runtime
 FROM debian:bookworm-slim
@@ -26,22 +26,22 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Create app user
-RUN useradd -r -s /bin/false edgehive
+RUN useradd -r -s /bin/false rustgateway
 
 WORKDIR /app
 
 # Copy the binary from builder
-COPY --from=builder /app/target/release/edge-hive /app/edge-hive
+COPY --from=builder /app/target/release/rust-edge-gateway /app/rust-edge-gateway
 
 # Copy static files
 COPY static /app/static
 
 # Copy SDK for handler compilation (handlers need this)
-COPY crates/edge-hive-sdk /app/crates/edge-hive-sdk
+COPY crates/rust-edge-gateway-sdk /app/crates/rust-edge-gateway-sdk
 
 # Create directories
 RUN mkdir -p /app/data /app/handlers && \
-    chown -R edgehive:edgehive /app
+    chown -R rustgateway:rustgateway /app
 
 # Install Rust for handler compilation (minimal)
 RUN apt-get update && apt-get install -y curl && \
@@ -58,5 +58,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
     CMD curl -f http://localhost:8081/api/health || exit 1
 
 # Run as root (needed for cargo)
-CMD ["/app/edge-hive"]
+CMD ["/app/rust-edge-gateway"]
 

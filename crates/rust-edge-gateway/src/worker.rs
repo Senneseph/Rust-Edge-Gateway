@@ -20,7 +20,7 @@ pub struct Worker {
 
 impl Worker {
     /// Send a request to the worker and get the response
-    pub fn handle_request(&mut self, request: &edge_hive_sdk::Request) -> Result<edge_hive_sdk::Response> {
+    pub fn handle_request(&mut self, request: &rust_edge_gateway_sdk::Request) -> Result<rust_edge_gateway_sdk::Response> {
         let stdin = self.process.stdin.as_mut()
             .ok_or_else(|| anyhow!("Worker stdin not available"))?;
         let stdout = self.process.stdout.as_mut()
@@ -43,7 +43,7 @@ impl Worker {
         let mut response_buf = vec![0u8; len];
         stdout.read_exact(&mut response_buf)?;
         
-        let response: edge_hive_sdk::Response = serde_json::from_slice(&response_buf)?;
+        let response: rust_edge_gateway_sdk::Response = serde_json::from_slice(&response_buf)?;
         Ok(response)
     }
     
@@ -130,9 +130,9 @@ impl WorkerManager {
     pub fn handle_request(
         &mut self,
         endpoint_id: &str,
-        request: &edge_hive_sdk::Request,
+        request: &rust_edge_gateway_sdk::Request,
         _timeout: Duration,
-    ) -> Result<edge_hive_sdk::Response> {
+    ) -> Result<rust_edge_gateway_sdk::Response> {
         let worker = self.workers.get_mut(endpoint_id)
             .ok_or_else(|| anyhow!("No worker for endpoint {}", endpoint_id))?;
         

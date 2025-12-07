@@ -18,7 +18,7 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-edge-hive-sdk = { path = "{sdk_path}" }
+rust-edge-gateway-sdk = { path = "{sdk_path}" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -32,16 +32,16 @@ strip = true
 
 /// Template for handler main.rs wrapper
 const MAIN_RS_TEMPLATE: &str = r#"//! Auto-generated handler wrapper
-use edge_hive_sdk::prelude::*;
+use rust_edge_gateway_sdk::prelude::*;
 
 mod handler;
 
 fn main() {
     loop {
-        match edge_hive_sdk::ipc::read_request() {
+        match rust_edge_gateway_sdk::ipc::read_request() {
             Ok(req) => {
                 let response = handler::handle(req);
-                if let Err(e) = edge_hive_sdk::ipc::send_response(response) {
+                if let Err(e) = rust_edge_gateway_sdk::ipc::send_response(response) {
                     eprintln!("Failed to send response: {}", e);
                 }
             }
@@ -73,8 +73,8 @@ fn compile_handler_sync(handlers_dir: &PathBuf, id: &str, code: &str) -> Result<
     std::fs::create_dir_all(&src_dir)?;
 
     // Calculate relative path to SDK
-    // Assuming handlers_dir is at ./handlers and SDK is at ./crates/edge-hive-sdk
-    let sdk_path = "../../crates/edge-hive-sdk";
+    // Assuming handlers_dir is at ./handlers and SDK is at ./crates/rust-edge-gateway-sdk
+    let sdk_path = "../../crates/rust-edge-gateway-sdk";
 
     // Package name must start with a letter, so prefix with "handler_"
     let package_name = format!("handler_{}", id.replace('-', "_"));
