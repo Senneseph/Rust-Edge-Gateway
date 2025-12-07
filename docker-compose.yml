@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  edge-hive:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: edge-hive
+    ports:
+      - "9080:8080"   # Gateway
+      - "9081:8081"   # Admin UI
+    volumes:
+      # Mount source for development
+      - .:/app
+      # Persist compiled handlers and data
+      - ./data:/app/data
+      - ./handlers:/app/handlers
+      # Cache cargo registry for faster builds
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - target-cache:/app/target
+    environment:
+      - RUST_LOG=info,edge_hive_gateway=debug
+      - EDGE_HIVE_DATA_DIR=/app/data
+      - EDGE_HIVE_HANDLERS_DIR=/app/handlers
+      - EDGE_HIVE_STATIC_DIR=/app/static
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  target-cache:
+

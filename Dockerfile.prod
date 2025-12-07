@@ -1,0 +1,62 @@
+# Edge Hive Platform - Production Multi-Stage Build
+# Stage 1: Build
+FROM rust:1.83-slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy workspace files
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# Build release binary
+RUN cargo build --release --bin edge-hive
+
+# Stage 2: Runtime
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    sqlite3 \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app user
+RUN useradd -r -s /bin/false edgehive
+
+WORKDIR /app
+
+# Copy the binary from builder
+COPY --from=builder /app/target/release/edge-hive /app/edge-hive
+
+# Copy static files
+COPY static /app/static
+
+# Copy SDK for handler compilation (handlers need this)
+COPY crates/edge-hive-sdk /app/crates/edge-hive-sdk
+
+# Create directories
+RUN mkdir -p /app/data /app/handlers && \
+    chown -R edgehive:edgehive /app
+
+# Install Rust for handler compilation (minimal)
+RUN apt-get update && apt-get install -y curl && \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Expose ports
+EXPOSE 8080 8081
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
+    CMD curl -f http://localhost:8081/api/health || exit 1
+
+# Run as root (needed for cargo)
+CMD ["/app/edge-hive"]
+

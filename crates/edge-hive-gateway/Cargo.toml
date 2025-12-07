@@ -1,0 +1,27 @@
+[package]
+name = "edge-hive-gateway"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+description = "Edge Hive Gateway and Worker Supervisor"
+
+[[bin]]
+name = "edge-hive"
+path = "src/main.rs"
+
+[dependencies]
+edge-hive-sdk = { path = "../edge-hive-sdk" }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+url = { workspace = true }

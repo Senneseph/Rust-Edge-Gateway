@@ -1,0 +1,41 @@
+# Edge Hive Caddy Configuration
+# Automatic HTTPS with Let's Encrypt
+
+{$TARGET_DOMAIN:edge-hive.iffuso.com} {
+    # Admin UI
+    handle /admin/* {
+        reverse_proxy edge-hive:8081
+    }
+    
+    # API endpoints for admin
+    handle /api/* {
+        reverse_proxy edge-hive:8081
+    }
+    
+    # Documentation (served from docs container or static files)
+    handle /docs/* {
+        reverse_proxy docs:3000
+    }
+    
+    # All other requests go to the gateway
+    handle {
+        reverse_proxy edge-hive:8080
+    }
+    
+    # Logging
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Wildcard for handler domains
+*.{$TARGET_DOMAIN:edge-hive.iffuso.com} {
+    reverse_proxy edge-hive:8080
+    
+    log {
+        output stdout
+        format console
+    }
+}
+
