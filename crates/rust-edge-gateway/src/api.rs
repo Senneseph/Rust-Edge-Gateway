@@ -1,7 +1,7 @@
 //! Admin API endpoints
 
 use axum::{
-    extract::{Path, State},
+    extract::{Multipart, Path, Query, State},
     http::StatusCode,
     Json,
 };
@@ -803,6 +803,229 @@ pub async fn import_openapi(
         endpoints_created,
         endpoints,
     })))
+}
+
+// ============================================================================
+// Bundle Import (ZIP with OpenAPI + Handlers)
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct ImportBundleQuery {
+    /// Domain to associate endpoints with
+    pub domain: String,
+    /// Domain ID for new collection (required if create_collection is true)
+    pub domain_id: Option<String>,
+    /// Optional collection ID to group endpoints
+    pub collection_id: Option<String>,
+    /// Whether to create a new collection from the spec
+    #[serde(default)]
+    pub create_collection: bool,
+    /// Whether to compile handlers after import
+    #[serde(default)]
+    pub compile: bool,
+    /// Whether to start handlers after compilation
+    #[serde(default)]
+    pub start: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportBundleResponse {
+    pub collection: Option<Collection>,
+    pub endpoints_created: usize,
+    pub endpoints_updated: usize,
+    pub handlers_matched: usize,
+    pub compiled: usize,
+    pub started: usize,
+    pub endpoints: Vec<Endpoint>,
+    pub errors: Vec<String>,
+}
+
+/// Import a bundle (ZIP file) containing OpenAPI spec and handler code
+///
+/// The ZIP can contain:
+/// - openapi.yaml/openapi.json (or api.yaml/spec.yaml variants) - OpenAPI spec
+/// - handlers/*.rs or *.rs files - Handler code matching operationIds
+///
+/// Handler files are matched to operations by normalizing names:
+/// - getPet.rs -> get_pet -> matches operationId "getPet" or "get_pet"
+pub async fn import_bundle(
+    State(state): State<Arc<AppState>>,
+    Query(query): Query<ImportBundleQuery>,
+    mut multipart: Multipart,
+) -> Result<Json<ApiResponse<ImportBundleResponse>>, StatusCode> {
+    // Read the ZIP file from multipart
+    let mut zip_bytes: Option<Vec<u8>> = None;
+
+    while let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "bundle" || name == "file" || name == "zip" {
+            match field.bytes().await {
+                Ok(bytes) => zip_bytes = Some(bytes.to_vec()),
+                Err(e) => return Ok(Json(ApiResponse::err(format!("Failed to read file: {}", e)))),
+            }
+        }
+    }
+
+    let zip_bytes = match zip_bytes {
+        Some(b) => b,
+        None => return Ok(Json(ApiResponse::err("No bundle file provided. Use field name 'bundle', 'file', or 'zip'"))),
+    };
+
+    // Parse the bundle
+    let bundle = match crate::bundle::parse_bundle(&zip_bytes) {
+        Ok(b) => b,
+        Err(e) => return Ok(Json(ApiResponse::err(format!("Failed to parse bundle: {}", e)))),
+    };
+
+    let mut response = ImportBundleResponse {
+        collection: None,
+        endpoints_created: 0,
+        endpoints_updated: 0,
+        handlers_matched: 0,
+        compiled: 0,
+        started: 0,
+        endpoints: Vec::new(),
+        errors: Vec::new(),
+    };
+
+    // If we have an OpenAPI spec, parse it and create/update endpoints
+    let endpoints = if let Some(ref spec) = bundle.openapi_spec {
+        let import_result = match crate::openapi::parse_openapi(spec) {
+            Ok(result) => result,
+            Err(e) => return Ok(Json(ApiResponse::err(format!("Failed to parse OpenAPI spec: {}", e)))),
+        };
+
+        // Optionally create a collection
+        let collection_id = if query.create_collection {
+            let domain_id = match query.domain_id {
+                Some(ref id) => id.clone(),
+                None => return Ok(Json(ApiResponse::err("domain_id required when create_collection is true"))),
+            };
+
+            let collection = Collection {
+                id: Uuid::new_v4().to_string(),
+                domain_id,
+                name: import_result.title.clone(),
+                description: import_result.description.clone(),
+                base_path: import_result.base_path.clone(),
+                enabled: true,
+                created_at: None,
+                updated_at: None,
+            };
+
+            if let Err(e) = state.db.create_collection(&collection) {
+                return Ok(Json(ApiResponse::err(format!("Failed to create collection: {}", e))));
+            }
+
+            let id = collection.id.clone();
+            response.collection = Some(collection);
+            Some(id)
+        } else {
+            query.collection_id.clone()
+        };
+
+        // Create endpoints from OpenAPI
+        crate::openapi::create_endpoints_from_import(
+            &import_result,
+            &query.domain,
+            collection_id.as_deref(),
+        )
+    } else if !bundle.handlers.is_empty() {
+        // No OpenAPI spec, but we have handlers - try to update existing endpoints
+        Vec::new()
+    } else {
+        return Ok(Json(ApiResponse::err("Bundle must contain an OpenAPI spec or handler files")));
+    };
+
+    // Process each endpoint
+    for mut endpoint in endpoints {
+        // Try to find matching handler code
+        if let Some(handler_code) = crate::bundle::find_handler_for_operation(&bundle.handlers, &endpoint.name) {
+            endpoint.code = Some(handler_code);
+            response.handlers_matched += 1;
+        }
+
+        // Save endpoint
+        if let Err(e) = state.db.create_endpoint(&endpoint) {
+            response.errors.push(format!("Failed to create endpoint '{}': {}", endpoint.name, e));
+            continue;
+        }
+        response.endpoints_created += 1;
+        response.endpoints.push(endpoint);
+    }
+
+    // If we only have handlers (no OpenAPI), update existing endpoints
+    if bundle.openapi_spec.is_none() {
+        for (handler_name, code) in &bundle.handlers {
+            // Find endpoints that match this handler name
+            if let Ok(all_endpoints) = state.db.list_endpoints() {
+                for existing in all_endpoints {
+                    let normalized_name = crate::bundle::normalize_handler_name(&existing.name);
+                    if &normalized_name == handler_name {
+                        if let Err(e) = state.db.update_endpoint_code(&existing.id, code) {
+                            response.errors.push(format!("Failed to update endpoint '{}': {}", existing.name, e));
+                        } else {
+                            response.endpoints_updated += 1;
+                            response.handlers_matched += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Compile if requested
+    if query.compile {
+        for endpoint in &response.endpoints {
+            if let Some(ref code) = endpoint.code {
+                match crate::compiler::compile_handler(&state.config, &endpoint.id, code).await {
+                    Ok(_) => {
+                        state.db.mark_compiled(&endpoint.id, true).ok();
+                        response.compiled += 1;
+                    }
+                    Err(e) => {
+                        response.errors.push(format!("Failed to compile '{}': {}", endpoint.name, e));
+                    }
+                }
+            }
+        }
+    }
+
+    // Start if requested (requires compile)
+    if query.start && query.compile {
+        for endpoint in &response.endpoints {
+            if let Ok(Some(ep)) = state.db.get_endpoint(&endpoint.id) {
+                if ep.compiled {
+                    let mut workers = state.workers.write().await;
+                    match workers.start_worker(&ep) {
+                        Ok(_) => {
+                            state.db.update_endpoint(&Endpoint { enabled: true, ..ep }).ok();
+                            response.started += 1;
+                        }
+                        Err(e) => {
+                            response.errors.push(format!("Failed to start '{}': {}", endpoint.name, e));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(Json(ApiResponse::ok(response)))
+}
+
+/// Update handler code for an endpoint by name (from bundle)
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct UpdateHandlerRequest {
+    /// The handler code (Rust source)
+    pub code: String,
+    /// Whether to compile after update
+    #[serde(default)]
+    pub compile: bool,
+    /// Whether to restart after compilation
+    #[serde(default)]
+    pub restart: bool,
 }
 
 // ============================================================================

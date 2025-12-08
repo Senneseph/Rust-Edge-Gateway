@@ -1,0 +1,1019 @@
+openapi: 3.0.3
+info:
+  title: Rust Edge Gateway Management API
+  description: |
+    REST API for managing the Rust Edge Gateway - a serverless edge computing platform
+    that allows Rust handlers to be deployed and executed dynamically.
+    
+    ## Key Concepts
+    - **Domains**: Top-level organization (e.g., "api.example.com")
+    - **Collections**: Groups of related endpoints within a domain
+    - **Endpoints**: Individual API routes with Rust handler code
+    - **Services**: Backend connections (databases, storage, email, etc.)
+  version: 0.1.0
+  contact:
+    name: Rust Edge Gateway
+    url: https://docs.rust-edge-gateway.iffuso.com/
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://rust-edge-gateway.iffuso.com/api
+    description: Production Admin API
+  - url: http://localhost:8081/api
+    description: Local Development
+
+tags:
+  - name: Domains
+    description: Manage top-level domains
+  - name: Collections
+    description: Group endpoints into collections
+  - name: Endpoints
+    description: Manage API endpoints and handlers
+  - name: Services
+    description: Configure backend service connections
+  - name: Import
+    description: Import APIs from OpenAPI specs or bundles
+  - name: System
+    description: Health checks and statistics
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Gateway is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /stats:
+    get:
+      tags: [System]
+      summary: Get gateway statistics
+      operationId: getStats
+      responses:
+        '200':
+          description: Gateway statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+
+  /domains:
+    get:
+      tags: [Domains]
+      summary: List all domains
+      operationId: listDomains
+      responses:
+        '200':
+          description: List of domains
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainListResponse'
+    post:
+      tags: [Domains]
+      summary: Create a domain
+      operationId: createDomain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDomainRequest'
+      responses:
+        '200':
+          description: Domain created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainResponse'
+
+  /domains/{id}:
+    parameters:
+      - $ref: '#/components/parameters/DomainId'
+    get:
+      tags: [Domains]
+      summary: Get a domain by ID
+      operationId: getDomain
+      responses:
+        '200':
+          description: Domain details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainResponse'
+    put:
+      tags: [Domains]
+      summary: Update a domain
+      operationId: updateDomain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDomainRequest'
+      responses:
+        '200':
+          description: Domain updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainResponse'
+    delete:
+      tags: [Domains]
+      summary: Delete a domain
+      operationId: deleteDomain
+      responses:
+        '200':
+          description: Domain deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /domains/{id}/collections:
+    parameters:
+      - $ref: '#/components/parameters/DomainId'
+    get:
+      tags: [Domains]
+      summary: List collections in a domain
+      operationId: listDomainCollections
+      responses:
+        '200':
+          description: List of collections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionListResponse'
+
+  /collections:
+    get:
+      tags: [Collections]
+      summary: List all collections
+      operationId: listCollections
+      responses:
+        '200':
+          description: List of collections
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionListResponse'
+    post:
+      tags: [Collections]
+      summary: Create a collection
+      operationId: createCollection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCollectionRequest'
+      responses:
+        '200':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+
+  /collections/{id}:
+    parameters:
+      - $ref: '#/components/parameters/CollectionId'
+    get:
+      tags: [Collections]
+      summary: Get a collection by ID
+      operationId: getCollection
+      responses:
+        '200':
+          description: Collection details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+    put:
+      tags: [Collections]
+      summary: Update a collection
+      operationId: updateCollection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCollectionRequest'
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionResponse'
+    delete:
+      tags: [Collections]
+      summary: Delete a collection
+      operationId: deleteCollection
+      responses:
+        '200':
+          description: Collection deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /endpoints:
+    get:
+      tags: [Endpoints]
+      summary: List all endpoints
+      operationId: listEndpoints
+      responses:
+        '200':
+          description: List of endpoints
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointListResponse'
+    post:
+      tags: [Endpoints]
+      summary: Create an endpoint
+      operationId: createEndpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEndpointRequest'
+      responses:
+        '200':
+          description: Endpoint created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointResponse'
+
+  /endpoints/{id}:
+    parameters:
+      - $ref: '#/components/parameters/EndpointId'
+    get:
+      tags: [Endpoints]
+      summary: Get an endpoint by ID
+      operationId: getEndpoint
+      responses:
+        '200':
+          description: Endpoint details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointResponse'
+    put:
+      tags: [Endpoints]
+      summary: Update an endpoint
+      operationId: updateEndpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEndpointRequest'
+      responses:
+        '200':
+          description: Endpoint updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndpointResponse'
+    delete:
+      tags: [Endpoints]
+      summary: Delete an endpoint
+      operationId: deleteEndpoint
+      responses:
+        '200':
+          description: Endpoint deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /endpoints/{id}/code:
+    parameters:
+      - $ref: '#/components/parameters/EndpointId'
+    get:
+      tags: [Endpoints]
+      summary: Get endpoint handler code
+      operationId: getEndpointCode
+      responses:
+        '200':
+          description: Handler code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeResponse'
+    put:
+      tags: [Endpoints]
+      summary: Update endpoint handler code
+      operationId: updateEndpointCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCodeRequest'
+      responses:
+        '200':
+          description: Code updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /endpoints/{id}/compile:
+    parameters:
+      - $ref: '#/components/parameters/EndpointId'
+    post:
+      tags: [Endpoints]
+      summary: Compile endpoint handler
+      operationId: compileEndpoint
+      responses:
+        '200':
+          description: Compilation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompileResponse'
+
+  /endpoints/{id}/start:
+    parameters:
+      - $ref: '#/components/parameters/EndpointId'
+    post:
+      tags: [Endpoints]
+      summary: Start endpoint worker
+      operationId: startEndpoint
+      responses:
+        '200':
+          description: Worker started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /endpoints/{id}/stop:
+    parameters:
+      - $ref: '#/components/parameters/EndpointId'
+    post:
+      tags: [Endpoints]
+      summary: Stop endpoint worker
+      operationId: stopEndpoint
+      responses:
+        '200':
+          description: Worker stopped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /services:
+    get:
+      tags: [Services]
+      summary: List all services
+      operationId: listServices
+      responses:
+        '200':
+          description: List of services
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceListResponse'
+    post:
+      tags: [Services]
+      summary: Create a service
+      operationId: createService
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateServiceRequest'
+      responses:
+        '200':
+          description: Service created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResponse'
+
+  /services/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ServiceId'
+    get:
+      tags: [Services]
+      summary: Get a service by ID
+      operationId: getService
+      responses:
+        '200':
+          description: Service details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResponse'
+    put:
+      tags: [Services]
+      summary: Update a service
+      operationId: updateService
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateServiceRequest'
+      responses:
+        '200':
+          description: Service updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceResponse'
+    delete:
+      tags: [Services]
+      summary: Delete a service
+      operationId: deleteService
+      responses:
+        '200':
+          description: Service deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /services/{id}/test:
+    parameters:
+      - $ref: '#/components/parameters/ServiceId'
+    post:
+      tags: [Services]
+      summary: Test service connection
+      operationId: testService
+      responses:
+        '200':
+          description: Connection test result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceTestResponse'
+
+  /import/openapi:
+    post:
+      tags: [Import]
+      summary: Import endpoints from OpenAPI spec
+      operationId: importOpenapi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportOpenApiRequest'
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportOpenApiResponse'
+
+  /import/bundle:
+    post:
+      tags: [Import]
+      summary: Import bundle (ZIP with OpenAPI + handlers)
+      operationId: importBundle
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Domain to associate endpoints with
+        - name: domain_id
+          in: query
+          schema:
+            type: string
+          description: Domain UUID (required if create_collection is true)
+        - name: collection_id
+          in: query
+          schema:
+            type: string
+          description: Existing collection to add endpoints to
+        - name: create_collection
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Create new collection from spec info
+        - name: compile
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Compile handlers after import
+        - name: start
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Start handlers after compilation
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                bundle:
+                  type: string
+                  format: binary
+                  description: ZIP file containing OpenAPI spec and handlers
+              required:
+                - bundle
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportBundleResponse'
+
+components:
+  parameters:
+    DomainId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Domain UUID
+    CollectionId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Collection UUID
+    EndpointId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Endpoint UUID
+    ServiceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Service UUID
+
+  schemas:
+    ApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+        error:
+          type: string
+
+    HealthResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: string
+              example: healthy
+
+    StatsResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                endpoint_count:
+                  type: integer
+                active_workers:
+                  type: integer
+
+    Domain:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        host:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateDomainRequest:
+      type: object
+      required: [name, host]
+      properties:
+        name:
+          type: string
+        host:
+          type: string
+        description:
+          type: string
+
+    UpdateDomainRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        host:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+
+    DomainResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Domain'
+
+    DomainListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Domain'
+
+    Collection:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        domain_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        base_path:
+          type: string
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateCollectionRequest:
+      type: object
+      required: [domain_id, name]
+      properties:
+        domain_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        base_path:
+          type: string
+
+    UpdateCollectionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        base_path:
+          type: string
+        enabled:
+          type: boolean
+
+    CollectionResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Collection'
+
+    CollectionListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Collection'
+
+    Endpoint:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        collection_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        domain:
+          type: string
+        path:
+          type: string
+        method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS]
+        description:
+          type: string
+        code:
+          type: string
+        compiled:
+          type: boolean
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateEndpointRequest:
+      type: object
+      required: [name, domain, path, method]
+      properties:
+        collection_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        domain:
+          type: string
+        path:
+          type: string
+        method:
+          type: string
+          enum: [GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS]
+        description:
+          type: string
+        code:
+          type: string
+
+    UpdateEndpointRequest:
+      type: object
+      properties:
+        collection_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        domain:
+          type: string
+        path:
+          type: string
+        method:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+
+    EndpointResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Endpoint'
+
+    EndpointListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Endpoint'
+
+    UpdateCodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: Rust handler source code
+
+    CodeResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: string
+              description: Handler source code
+
+    CompileResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: string
+              description: Path to compiled binary
+
+    ServiceType:
+      type: string
+      enum: [sqlite, minio, mysql, postgres, redis, memcached, mongodb, ftp, email]
+
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        service_type:
+          $ref: '#/components/schemas/ServiceType'
+        config:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateServiceRequest:
+      type: object
+      required: [name, service_type, config]
+      properties:
+        name:
+          type: string
+        service_type:
+          $ref: '#/components/schemas/ServiceType'
+        config:
+          type: object
+          additionalProperties: true
+
+    UpdateServiceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        service_type:
+          $ref: '#/components/schemas/ServiceType'
+        config:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+
+    ServiceResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Service'
+
+    ServiceListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Service'
+
+    ServiceTestResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                id:
+                  type: string
+                name:
+                  type: string
+                service_type:
+                  $ref: '#/components/schemas/ServiceType'
+                connected:
+                  type: boolean
+                error:
+                  type: string
+                info:
+                  type: object
+
+    ImportOpenApiRequest:
+      type: object
+      required: [spec, domain]
+      properties:
+        spec:
+          type: string
+          description: OpenAPI spec content (YAML or JSON)
+        domain:
+          type: string
+          description: Domain to associate endpoints with
+        collection_id:
+          type: string
+          format: uuid
+          description: Optional collection ID to group endpoints
+        create_collection:
+          type: boolean
+          description: Whether to create a new collection from the spec
+        domain_id:
+          type: string
+          format: uuid
+          description: Domain ID for new collection (required if create_collection is true)
+
+    ImportOpenApiResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                collection:
+                  $ref: '#/components/schemas/Collection'
+                endpoints_created:
+                  type: integer
+                endpoints:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Endpoint'
+
+    ImportBundleResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                collection:
+                  $ref: '#/components/schemas/Collection'
+                endpoints_created:
+                  type: integer
+                endpoints_updated:
+                  type: integer
+                handlers_matched:
+                  type: integer
+                compiled:
+                  type: integer
+                started:
+                  type: integer
+                endpoints:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Endpoint'
+                errors:
+                  type: array
+                  items:
+                    type: string
+
