@@ -1,7 +1,7 @@
 //! Service types for dependency injection
 //!
 //! These types represent the services that can be injected into handlers.
-//! The actual implementations are provided by the Edge Hive runtime.
+//! The actual implementations are provided by the Rust Edge Gateway runtime.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -1,6 +1,6 @@
-# Migrating to Edge Hive
+# Migrating to Rust Edge Gateway
 
-This guide helps you migrate existing API services to Edge Hive.
+This guide helps you migrate existing API services to Rust Edge Gateway.
 
 ## Migration Steps
 
@@ -96,7 +96,7 @@ curl http://localhost:9080/users
 
 ### 5. Update DNS
 
-Point your domain to the Edge Hive server:
+Point your domain to the Rust Edge Gateway server:
 
 ```
 api.example.com  A  167.71.191.234
@@ -104,11 +104,11 @@ api.example.com  A  167.71.191.234
 
 ### 6. Deploy
 
-Your endpoint is now live on Edge Hive!
+Your endpoint is now live on Rust Edge Gateway!
 
 ## Common Patterns
 
-### Express.js to Edge Hive
+### Express.js to Rust Edge Gateway
 
 **Before (Express):**
 ```javascript
@@ -117,7 +117,7 @@ app.get('/api/status', (req, res) => {
 });
 ```
 
-**After (Edge Hive):**
+**After (Rust Edge Gateway):**
 ```rust
 use edge_hive_sdk::prelude::*;
 use chrono::Utc;
@@ -130,7 +130,7 @@ pub fn handle(_req: Request) -> Response {
 }
 ```
 
-### NestJS Controller to Edge Hive
+### NestJS Controller to Rust Edge Gateway
 
 **Before (NestJS):**
 ```typescript
@@ -143,7 +143,7 @@ export class ItemsController {
 }
 ```
 
-**After (Edge Hive):**
+**After (Rust Edge Gateway):**
 ```rust
 use edge_hive_sdk::prelude::*;
 

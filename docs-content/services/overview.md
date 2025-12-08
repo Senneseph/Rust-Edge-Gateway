@@ -1,6 +1,6 @@
 # Services Overview
 
-Edge Hive provides injectable services for common infrastructure needs. Services are long-lived and maintain connection pools across requests.
+Rust Edge Gateway provides injectable services for common infrastructure needs. Services are long-lived and maintain connection pools across requests.
 
 ## Available Services
 

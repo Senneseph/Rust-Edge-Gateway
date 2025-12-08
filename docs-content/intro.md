@@ -1,10 +1,10 @@
-# Edge Hive Platform
+# Rust Edge Gateway Platform
 
-Welcome to Edge Hive - a Rust-powered serverless edge platform that provides high-performance API endpoints with minimal resource usage.
+Welcome to Rust Edge Gateway - a Rust-powered serverless edge platform that provides high-performance API endpoints with minimal resource usage.
 
-## What is Edge Hive?
+## What is Rust Edge Gateway?
 
-Edge Hive is a lightweight alternative to AWS Lambda that:
+Rust Edge Gateway is a lightweight alternative to AWS Lambda that:
 
 - **Eliminates cold starts** - Workers stay warm and ready
 - **Uses minimal memory** - Native Rust binaries with sub-megabyte footprint
@@ -15,7 +15,7 @@ Edge Hive is a lightweight alternative to AWS Lambda that:
 
 ### 1. Access the Admin UI
 
-Navigate to `https://edge-hive.iffuso.com/admin/` and log in with your API key.
+Navigate to `https://rust-edge-gateway.iffuso.com/admin/` and log in with your API key.
 
 ### 2. Create an Endpoint
 
