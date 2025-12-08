@@ -1,0 +1,340 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Quick Start - Rust Edge Gateway</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Documentation for writing handlers and using the Rust Edge Gateway SDK">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "rust";
+            const default_dark_theme = "coal";
+            window.path_to_searchindex_js = "../searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Rust Edge Gateway</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway/edit/master/docs/src/getting-started/quick-start.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
+<p>This guide will help you create your first Rust Edge Gateway endpoint in under 5 minutes.</p>
+<h2 id="prerequisites"><a class="header" href="#prerequisites">Prerequisites</a></h2>
+<ul>
+<li>Rust Edge Gateway running (either locally via Docker or deployed)</li>
+<li>Access to the Admin UI</li>
+</ul>
+<h2 id="step-1-access-the-admin-ui"><a class="header" href="#step-1-access-the-admin-ui">Step 1: Access the Admin UI</a></h2>
+<p>Navigate to your gateway's admin interface:</p>
+<ul>
+<li><strong>Local Development</strong>: <code>http://localhost:9081/admin/</code></li>
+<li><strong>Production</strong>: <code>https://rust-edge-gateway.yourdomain.com/admin/</code></li>
+</ul>
+<h2 id="step-2-create-an-endpoint"><a class="header" href="#step-2-create-an-endpoint">Step 2: Create an Endpoint</a></h2>
+<ol>
+<li>Click <strong>"Create Endpoint"</strong> or the <strong>+</strong> button</li>
+<li>Fill in the endpoint details:</li>
+</ol>
+<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Example Value</th><th>Description</th></tr></thead><tbody>
+<tr><td><strong>Name</strong></td><td><code>hello-world</code></td><td>Unique identifier for your endpoint</td></tr>
+<tr><td><strong>Path</strong></td><td><code>/hello</code></td><td>The URL path to match</td></tr>
+<tr><td><strong>Method</strong></td><td><code>GET</code></td><td>HTTP method (GET, POST, PUT, DELETE, etc.)</td></tr>
+<tr><td><strong>Domain</strong></td><td><code>*</code></td><td>Domain to match (or <code>*</code> for all)</td></tr>
+</tbody></table>
+</div>
+<ol start="3">
+<li>Click <strong>Save</strong></li>
+</ol>
+<h2 id="step-3-write-handler-code"><a class="header" href="#step-3-write-handler-code">Step 3: Write Handler Code</a></h2>
+<p>In the code editor, replace the default code with:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use rust_edge_gateway_sdk::prelude::*;
+
+fn handle(req: Request) -&gt; Response {
+    Response::ok(json!({
+        "message": "Hello from Rust Edge Gateway!",
+        "path": req.path,
+        "method": req.method,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    }))
+}
+
+handler_loop!(handle);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="step-4-compile"><a class="header" href="#step-4-compile">Step 4: Compile</a></h2>
+<p>Click the <strong>"Compile"</strong> button. The gateway will:</p>
+<ol>
+<li>Generate a Cargo project with your code</li>
+<li>Compile it to a native binary</li>
+<li>Report success or any compilation errors</li>
+</ol>
+<p>You should see a success message like:</p>
+<pre><code>✓ Compiled successfully in 2.3s
+</code></pre>
+<h2 id="step-5-start-the-endpoint"><a class="header" href="#step-5-start-the-endpoint">Step 5: Start the Endpoint</a></h2>
+<p>Click <strong>"Start"</strong> to activate the endpoint. The status should change to <strong>Running</strong>.</p>
+<h2 id="step-6-test-your-endpoint"><a class="header" href="#step-6-test-your-endpoint">Step 6: Test Your Endpoint</a></h2>
+<p>Make a request to your endpoint:</p>
+<pre><code class="language-bash">curl http://localhost:9080/hello
+</code></pre>
+<p>You should receive:</p>
+<pre><code class="language-json">{
+  "message": "Hello from Rust Edge Gateway!",
+  "path": "/hello",
+  "method": "GET",
+  "timestamp": "2024-01-15T10:30:00.000Z"
+}
+</code></pre>
+<h2 id="whats-next"><a class="header" href="#whats-next">What's Next?</a></h2>
+<ul>
+<li><a href="./first-handler.html">Your First Handler</a> - Deeper dive into handler structure</li>
+<li><a href="./lifecycle.html">Handler Lifecycle</a> - Understand compilation and execution</li>
+<li><a href="../sdk/request.html">Request API</a> - Access headers, body, parameters</li>
+<li><a href="../sdk/response.html">Response API</a> - Build JSON, text, and custom responses</li>
+<li><a href="../examples/hello-world.html">Examples</a> - More code examples</li>
+</ul>
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<h3 id="compilation-errors"><a class="header" href="#compilation-errors">Compilation Errors</a></h3>
+<p>Check the error message for:</p>
+<ul>
+<li>Missing dependencies (add to your handler's <code>use</code> statements)</li>
+<li>Syntax errors (Rust compiler messages are helpful!)</li>
+<li>Type mismatches</li>
+</ul>
+<h3 id="endpoint-not-responding"><a class="header" href="#endpoint-not-responding">Endpoint Not Responding</a></h3>
+<ol>
+<li>Check the endpoint is in <strong>Running</strong> status</li>
+<li>Verify the path matches exactly (paths are case-sensitive)</li>
+<li>Check the method matches your request</li>
+<li>View endpoint logs in the admin UI</li>
+</ol>
+<h3 id="handler-crashes"><a class="header" href="#handler-crashes">Handler Crashes</a></h3>
+<p>View the logs to see panic messages or error output. Common causes:</p>
+<ul>
+<li>Unwrapping <code>None</code> or <code>Err</code> values</li>
+<li>Stack overflow from deep recursion</li>
+<li>Accessing invalid JSON fields</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../introduction.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="../getting-started/first-handler.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../introduction.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="../getting-started/first-handler.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
+
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
+
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>
