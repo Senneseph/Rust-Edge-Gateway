@@ -1,22 +1,22 @@
 #!/bin/bash
 set -e
 
-echo "=== Initializing Edge Hive Rust Workspace ==="
+echo "=== Initializing Rust Edge Gateway Rust Workspace ==="
 
 # Create workspace Cargo.toml
 cat > Cargo.toml << 'EOF'
 [workspace]
 resolver = "2"
 members = [
-    "crates/edge-hive-sdk",
-    "crates/edge-hive-gateway",
+    "crates/rust-edge-gateway-sdk",
+    "crates/rust-edge-gateway",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-authors = ["Edge Hive Team"]
+authors = ["Rust Edge Gateway Team"]
 
 [workspace.dependencies]
 # Async runtime
@@ -47,20 +47,20 @@ bytes = "1"
 EOF
 
 # Create directory structure
-mkdir -p crates/edge-hive-sdk/src
-mkdir -p crates/edge-hive-gateway/src
+mkdir -p crates/rust-edge-gateway-sdk/src
+mkdir -p crates/rust-edge-gateway/src
 mkdir -p handlers
 mkdir -p static/admin
 mkdir -p data
 
-echo "=== Creating edge-hive-sdk crate ==="
-cat > crates/edge-hive-sdk/Cargo.toml << 'EOF'
+echo "=== Creating rust-edge-gateway-sdk crate ==="
+cat > crates/rust-edge-gateway-sdk/Cargo.toml << 'EOF'
 [package]
-name = "edge-hive-sdk"
+name = "rust-edge-gateway-sdk"
 version.workspace = true
 edition = "2021"
 license.workspace = true
-description = "SDK for writing Edge Hive handlers"
+description = "SDK for writing Rust Edge Gateway handlers"
 
 [dependencies]
 serde = { workspace = true }
@@ -71,21 +71,21 @@ bytes = { workspace = true }
 [dev-dependencies]
 EOF
 
-echo "=== Creating edge-hive-gateway crate ==="
-cat > crates/edge-hive-gateway/Cargo.toml << 'EOF'
+echo "=== Creating rust-edge-gatewaye-gateway crate ==="
+cat > crates/rust-edge-gateway/Cargo.toml << 'EOF'
 [package]
-name = "edge-hive-gateway"
+name = "rust-edge-gateway"
 version.workspace = true
 edition = "2021"
 license.workspace = true
-description = "Edge Hive Gateway and Worker Supervisor"
+description = "Rust Edge Gateway and Worker Supervisor"
 
 [[bin]]
-name = "edge-hive"
+name = "rust-edge-gateway"
 path = "src/main.rs"
 
 [dependencies]
-edge-hive-sdk = { path = "../edge-hive-sdk" }
+rust-edge-gateway-sdk = { path = "../rust-edge-gateway-sdk" }
 tokio = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }

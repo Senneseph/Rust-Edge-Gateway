@@ -1,8 +1,8 @@
 # Admin API Reference
 
-The Edge Hive Admin API allows programmatic management of endpoints.
+The Rust Edge Gateway Admin API allows programmatic management of endpoints.
 
-**Base URL:** `https://edge-hive.iffuso.com/api`
+**Base URL:** `https://rust-edge-gateway.iffuso.com/api`
 
 ## Authentication
 
