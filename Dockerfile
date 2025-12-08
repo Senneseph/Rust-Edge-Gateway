@@ -1,6 +1,6 @@
 # Rust Edge Gateway - Production Container with Rust Toolchain
 # Includes Rust for handler compilation at runtime
-FROM rust:1.83-slim-bookworm
+FROM rust:1.86-slim-bookworm
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \

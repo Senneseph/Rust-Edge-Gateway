@@ -144,6 +144,68 @@ Content-Type: application/json
 }
 ```
 
+### Import Bundle (ZIP)
+
+Upload a ZIP file containing an OpenAPI spec and handler code files.
+
+```bash
+POST /api/import/bundle?domain=api.example.com&create_collection=true&domain_id=uuid&compile=true&start=true
+Content-Type: multipart/form-data
+
+# Form field: bundle (or file, zip) = your-bundle.zip
+```
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `domain` | string | Yes | Domain to associate endpoints with |
+| `domain_id` | string | No* | Domain UUID (*required if create_collection is true) |
+| `collection_id` | string | No | Existing collection to add endpoints to |
+| `create_collection` | bool | No | Create new collection from spec info |
+| `compile` | bool | No | Compile handlers after import |
+| `start` | bool | No | Start handlers after compilation (requires compile=true) |
+
+**Bundle Structure:**
+
+```
+bundle.zip
+├── openapi.yaml          # OpenAPI spec (or openapi.json, api.yaml, spec.yaml)
+└── handlers/             # Handler files (can also be at root or in src/)
+    ├── get_pets.rs       # Matches operationId "getPets" or "get_pets"
+    ├── create_pet.rs     # Matches operationId "createPet" or "create_pet"
+    └── get_pet_by_id.rs  # Matches operationId "getPetById" or "get_pet_by_id"
+```
+
+Handler files are matched to OpenAPI operations by normalizing names:
+- `getPet.rs` → matches operationId `getPet` or `get_pet`
+- `list_all_pets.rs` → matches operationId `listAllPets` or `list_all_pets`
+
+**Response:**
+
+```json
+{
+  "ok": true,
+  "data": {
+    "collection": {"id": "uuid", "name": "Pet Store"},
+    "endpoints_created": 5,
+    "endpoints_updated": 0,
+    "handlers_matched": 5,
+    "compiled": 5,
+    "started": 5,
+    "endpoints": [...],
+    "errors": []
+  }
+}
+```
+
+**Example with curl:**
+
+```bash
+curl -X POST "http://localhost:8081/api/import/bundle?domain=api.example.com&create_collection=true&domain_id=abc123&compile=true&start=true" \
+  -F "bundle=@my-api.zip"
+```
+
 ## Common Patterns
 
 ### List with Filters

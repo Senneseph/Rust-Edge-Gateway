@@ -3090,6 +3090,55 @@ Content-Type: application/json
   }
 }
 </code></pre>
+<h3 id="import-bundle-zip"><a class="header" href="#import-bundle-zip">Import Bundle (ZIP)</a></h3>
+<p>Upload a ZIP file containing an OpenAPI spec and handler code files.</p>
+<pre><code class="language-bash">POST /api/import/bundle?domain=api.example.com&amp;create_collection=true&amp;domain_id=uuid&amp;compile=true&amp;start=true
+Content-Type: multipart/form-data
+
+# Form field: bundle (or file, zip) = your-bundle.zip
+</code></pre>
+<p><strong>Query Parameters:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>domain</code></td><td>string</td><td>Yes</td><td>Domain to associate endpoints with</td></tr>
+<tr><td><code>domain_id</code></td><td>string</td><td>No*</td><td>Domain UUID (*required if create_collection is true)</td></tr>
+<tr><td><code>collection_id</code></td><td>string</td><td>No</td><td>Existing collection to add endpoints to</td></tr>
+<tr><td><code>create_collection</code></td><td>bool</td><td>No</td><td>Create new collection from spec info</td></tr>
+<tr><td><code>compile</code></td><td>bool</td><td>No</td><td>Compile handlers after import</td></tr>
+<tr><td><code>start</code></td><td>bool</td><td>No</td><td>Start handlers after compilation (requires compile=true)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Bundle Structure:</strong></p>
+<pre><code>bundle.zip
+├── openapi.yaml          # OpenAPI spec (or openapi.json, api.yaml, spec.yaml)
+└── handlers/             # Handler files (can also be at root or in src/)
+    ├── get_pets.rs       # Matches operationId "getPets" or "get_pets"
+    ├── create_pet.rs     # Matches operationId "createPet" or "create_pet"
+    └── get_pet_by_id.rs  # Matches operationId "getPetById" or "get_pet_by_id"
+</code></pre>
+<p>Handler files are matched to OpenAPI operations by normalizing names:</p>
+<ul>
+<li><code>getPet.rs</code> → matches operationId <code>getPet</code> or <code>get_pet</code></li>
+<li><code>list_all_pets.rs</code> → matches operationId <code>listAllPets</code> or <code>list_all_pets</code></li>
+</ul>
+<p><strong>Response:</strong></p>
+<pre><code class="language-json">{
+  "ok": true,
+  "data": {
+    "collection": {"id": "uuid", "name": "Pet Store"},
+    "endpoints_created": 5,
+    "endpoints_updated": 0,
+    "handlers_matched": 5,
+    "compiled": 5,
+    "started": 5,
+    "endpoints": [...],
+    "errors": []
+  }
+}
+</code></pre>
+<p><strong>Example with curl:</strong></p>
+<pre><code class="language-bash">curl -X POST "http://localhost:8081/api/import/bundle?domain=api.example.com&amp;create_collection=true&amp;domain_id=abc123&amp;compile=true&amp;start=true" \
+  -F "bundle=@my-api.zip"
+</code></pre>
 <h2 id="common-patterns-2"><a class="header" href="#common-patterns-2">Common Patterns</a></h2>
 <h3 id="list-with-filters"><a class="header" href="#list-with-filters">List with Filters</a></h3>
 <p>Most list endpoints support query parameters:</p>

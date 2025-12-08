@@ -13,6 +13,7 @@ mod worker;
 mod api;
 mod compiler;
 mod openapi;
+mod bundle;
 mod services;
 
 use anyhow::Result;
@@ -105,6 +106,7 @@ async fn main() -> Result<()> {
         .route("/endpoints/{id}/stop", post(api::stop_endpoint))
         // Import
         .route("/import/openapi", post(api::import_openapi))
+        .route("/import/bundle", post(api::import_bundle))
         // System
         .route("/health", get(api::health_check))
         .route("/stats", get(api::get_stats));
