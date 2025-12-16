@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Email - Rust Edge Gateway</title>
+        <title>Context API - Rust Edge Gateway</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../../favicon.svg">
-        <link rel="shortcut icon" href="../../favicon.png">
-        <link rel="stylesheet" href="../../css/variables.css">
-        <link rel="stylesheet" href="../../css/general.css">
-        <link rel="stylesheet" href="../../css/chrome.css">
-        <link rel="stylesheet" href="../../css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="../../fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "../../";
+            const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../../searchindex.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,13 +141,13 @@
                     <h1 class="menu-title">Rust Edge Gateway</h1>
 
                     <div class="right-buttons">
-                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
                         <a href="https://github.com/Senneseph/Rust-Edge-Gateway" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway/edit/master/docs/src/sdk/services/email.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway/edit/master/docs/src/sdk/context.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -181,160 +181,166 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="email-smtp-service"><a class="header" href="#email-smtp-service">Email (SMTP) Service</a></h1>
-<p>Send emails from your handlers using SMTP.</p>
-<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
-<h3 id="basic-smtp-with-starttls"><a class="header" href="#basic-smtp-with-starttls">Basic SMTP with STARTTLS</a></h3>
-<pre><code class="language-json">{
-  "service_type": "email",
-  "config": {
-    "host": "smtp.example.com",
-    "port": 587,
-    "username": "sender@example.com",
-    "password": "app-password",
-    "encryption": "starttls",
-    "from_address": "noreply@example.com",
-    "from_name": "My App",
-    "reply_to": "support@example.com"
-  }
+                        <h1 id="context-api"><a class="header" href="#context-api">Context API</a></h1>
+<p>The <code>Context</code> provides access to Service Actors from within your handler. It's the bridge between your handler code and backend services like databases, caches, and storage.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Every handler receives a <code>Context</code> reference:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // Use ctx to access services
+    let db = ctx.database("main-db").await?;
+    // ...
 }
-</code></pre>
-<h3 id="gmail-smtp"><a class="header" href="#gmail-smtp">Gmail SMTP</a></h3>
-<pre><code class="language-json">{
-  "service_type": "email",
-  "config": {
-    "host": "smtp.gmail.com",
-    "port": 587,
-    "username": "your-email@gmail.com",
-    "password": "your-app-password",
-    "encryption": "starttls",
-    "from_address": "your-email@gmail.com",
-    "from_name": "Your Name"
-  }
-}
-</code></pre>
-<h3 id="implicit-tls-port-465"><a class="header" href="#implicit-tls-port-465">Implicit TLS (Port 465)</a></h3>
-<pre><code class="language-json">{
-  "service_type": "email",
-  "config": {
-    "host": "smtp.example.com",
-    "port": 465,
-    "username": "sender@example.com",
-    "password": "secret",
-    "encryption": "tls",
-    "from_address": "noreply@example.com"
-  }
-}
-</code></pre>
-<h3 id="local-smtp-no-auth"><a class="header" href="#local-smtp-no-auth">Local SMTP (No Auth)</a></h3>
-<pre><code class="language-json">{
-  "service_type": "email",
-  "config": {
-    "host": "localhost",
-    "port": 25,
-    "encryption": "none",
-    "from_address": "app@localhost"
-  }
-}
-</code></pre>
-<h2 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>host</code></td><td>string</td><td>required</td><td>SMTP server hostname</td></tr>
-<tr><td><code>port</code></td><td>u16</td><td>587</td><td>SMTP port</td></tr>
-<tr><td><code>username</code></td><td>string</td><td>null</td><td>Auth username (usually email address)</td></tr>
-<tr><td><code>password</code></td><td>string</td><td>null</td><td>Auth password or app password</td></tr>
-<tr><td><code>encryption</code></td><td>string</td><td>"starttls"</td><td>Encryption: "none", "starttls", or "tls"</td></tr>
-<tr><td><code>from_address</code></td><td>string</td><td>required</td><td>Default sender email</td></tr>
-<tr><td><code>from_name</code></td><td>string</td><td>null</td><td>Default sender display name</td></tr>
-<tr><td><code>reply_to</code></td><td>string</td><td>null</td><td>Default reply-to address</td></tr>
-<tr><td><code>timeout_seconds</code></td><td>u32</td><td>30</td><td>Connection timeout</td></tr>
-<tr><td><code>max_retries</code></td><td>u32</td><td>3</td><td>Send retry attempts</td></tr>
+<span class="boring">}</span></code></pre></pre>
+<h2 id="available-services"><a class="header" href="#available-services">Available Services</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Method</th><th>Returns</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>ctx.database(name)</code></td><td><code>DatabaseHandle</code></td><td>SQL database connection</td></tr>
+<tr><td><code>ctx.cache(name)</code></td><td><code>CacheHandle</code></td><td>Key-value cache (Redis)</td></tr>
+<tr><td><code>ctx.storage(name)</code></td><td><code>StorageHandle</code></td><td>Object storage (S3/MinIO)</td></tr>
 </tbody></table>
 </div>
-<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
-<h3 id="send-a-simple-email"><a class="header" href="#send-a-simple-email">Send a Simple Email</a></h3>
+<h2 id="database-access"><a class="header" href="#database-access">Database Access</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use rust_edge_gateway_sdk::prelude::*;
-
-fn handle(req: Request) -&gt; Response {
-    let email = EmailPool { pool_id: "notifications".to_string() };
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let db = ctx.database("main-db").await?;
     
-    let result = email.send(
-        "user@example.com",
-        "Welcome!",
-        "Thanks for signing up.",
-    );
+    // Query with parameters
+    let users = db.query(
+        "SELECT id, name, email FROM users WHERE active = $1",
+        &amp;[&amp;true]
+    ).await?;
     
-    match result {
-        Ok(()) =&gt; Response::ok(json!({"sent": true})),
-        Err(e) =&gt; Response::internal_error(e.to_string()),
-    }
+    // Execute (INSERT, UPDATE, DELETE)
+    let affected = db.execute(
+        "UPDATE users SET last_login = NOW() WHERE id = $1",
+        &amp;[&amp;user_id]
+    ).await?;
+    
+    // Query single row
+    let user = db.query_one(
+        "SELECT * FROM users WHERE id = $1",
+        &amp;[&amp;user_id]
+    ).await?;
+    
+    Ok(Response::ok(json!({"users": users})))
 }
 <span class="boring">}</span></code></pre></pre>
-<h3 id="send-html-email"><a class="header" href="#send-html-email">Send HTML Email</a></h3>
+<h2 id="cache-access"><a class="header" href="#cache-access">Cache Access</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    let email = EmailPool { pool_id: "notifications".to_string() };
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let cache = ctx.cache("redis").await?;
     
-    let html = r#"
-        &lt;h1&gt;Welcome!&lt;/h1&gt;
-        &lt;p&gt;Thanks for joining us.&lt;/p&gt;
-        &lt;a href="https://example.com/verify"&gt;Verify your email&lt;/a&gt;
-    "#;
-    
-    let result = email.send_html(
-        "user@example.com",
-        "Welcome to Our App",
-        html,
-    );
-    
-    match result {
-        Ok(()) =&gt; Response::ok(json!({"sent": true})),
-        Err(e) =&gt; Response::internal_error(e.to_string()),
+    // Try cache first
+    if let Some(cached) = cache.get("users:all").await? {
+        return Ok(Response::ok(cached));
     }
+    
+    // Cache miss - fetch from database
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users", &amp;[]).await?;
+    
+    // Store in cache with TTL (seconds)
+    cache.set("users:all", &amp;users, 300).await?;
+    
+    Ok(Response::ok(json!({"users": users})))
 }
 <span class="boring">}</span></code></pre></pre>
-<h3 id="send-with-custom-from"><a class="header" href="#send-with-custom-from">Send with Custom From</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>let result = email.send_from(
-    "support@example.com",  // From
-    "Support Team",         // From name
-    "user@example.com",     // To
-    "Your Ticket #123",     // Subject
-    "We've received your support request...",
-);
-<span class="boring">}</span></code></pre></pre>
-<h2 id="common-providers"><a class="header" href="#common-providers">Common Providers</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Provider</th><th>Host</th><th>Port</th><th>Encryption</th></tr></thead><tbody>
-<tr><td>Gmail</td><td>smtp.gmail.com</td><td>587</td><td>starttls</td></tr>
-<tr><td>Outlook</td><td>smtp.office365.com</td><td>587</td><td>starttls</td></tr>
-<tr><td>SendGrid</td><td>smtp.sendgrid.net</td><td>587</td><td>starttls</td></tr>
-<tr><td>Mailgun</td><td>smtp.mailgun.org</td><td>587</td><td>starttls</td></tr>
-<tr><td>Amazon SES</td><td>email-smtp.{region}.amazonaws.com</td><td>587</td><td>starttls</td></tr>
+<h3 id="cache-operations"><a class="header" href="#cache-operations">Cache Operations</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Method</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>get(key)</code></td><td>Get value by key</td></tr>
+<tr><td><code>set(key, value, ttl)</code></td><td>Set value with TTL in seconds</td></tr>
+<tr><td><code>delete(key)</code></td><td>Delete a key</td></tr>
+<tr><td><code>exists(key)</code></td><td>Check if key exists</td></tr>
+<tr><td><code>incr(key)</code></td><td>Increment numeric value</td></tr>
+<tr><td><code>decr(key)</code></td><td>Decrement numeric value</td></tr>
 </tbody></table>
 </div>
-<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h2 id="storage-access"><a class="header" href="#storage-access">Storage Access</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let storage = ctx.storage("s3").await?;
+    
+    // Upload file
+    let data = req.body_bytes();
+    storage.put("uploads/file.txt", data).await?;
+    
+    // Download file
+    let content = storage.get("config/settings.json").await?;
+    
+    // List files
+    let files = storage.list("uploads/").await?;
+    
+    // Delete file
+    storage.delete("uploads/old-file.txt").await?;
+    
+    // Get signed URL (for direct client access)
+    let url = storage.presigned_url("uploads/file.txt", 3600).await?;
+    
+    Ok(Response::ok(json!({"url": url})))
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="service-configuration"><a class="header" href="#service-configuration">Service Configuration</a></h2>
+<p>Services are configured in the Admin UI or via the Management API. Each service has a unique name that you use to access it:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// These names come from your service configuration
+let main_db = ctx.database("main-db").await?;
+let read_replica = ctx.database("read-replica").await?;
+let session_cache = ctx.cache("sessions").await?;
+let file_storage = ctx.storage("uploads").await?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>Service operations return <code>Result</code> types that can be used with <code>?</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    // Service errors are automatically converted to HandlerError
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users", &amp;[]).await?;
+    
+    Ok(Response::ok(json!({"users": users})))
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Common error types:</p>
+<ul>
+<li><code>ServiceNotFound</code> - The named service doesn't exist</li>
+<li><code>ConnectionError</code> - Failed to connect to the service</li>
+<li><code>QueryError</code> - Database query failed</li>
+<li><code>StorageError</code> - Storage operation failed</li>
+</ul>
+<h2 id="actor-based-architecture"><a class="header" href="#actor-based-architecture">Actor-Based Architecture</a></h2>
+<p>Under the hood, services use an actor-based architecture:</p>
 <ol>
-<li><strong>Use app passwords</strong> - Don't use your main account password</li>
-<li><strong>Set up SPF/DKIM</strong> - Improve deliverability</li>
-<li><strong>Handle failures</strong> - Emails can fail; log and retry</li>
-<li><strong>Rate limit</strong> - Don't spam; respect provider limits</li>
-<li><strong>Use templates</strong> - Consistent formatting</li>
-<li><strong>Test with sandbox</strong> - Use test mode before production</li>
+<li><strong>Service Actors</strong> run as background tasks</li>
+<li><strong>Handlers send messages</strong> to actors via channels</li>
+<li><strong>Actors process requests</strong> and send responses back</li>
+<li><strong>Connection pooling</strong> is handled automatically</li>
 </ol>
+<p>This provides:</p>
+<ul>
+<li><strong>Isolation</strong> - Service failures don't crash handlers</li>
+<li><strong>Concurrency</strong> - Multiple handlers can share services safely</li>
+<li><strong>Efficiency</strong> - Connection pools are reused across requests</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../sdk/services/ftp.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../sdk/handlers.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../architecture/overview.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../sdk/request.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -344,11 +350,11 @@ fn handle(req: Request) -&gt; Response {
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../sdk/services/ftp.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../sdk/handlers.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../architecture/overview.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../sdk/request.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -362,19 +368,19 @@ fn handle(req: Request) -&gt; Response {
             window.playground_copyable = true;
         </script>
 
-        <script src="../../ace.js"></script>
-        <script src="../../mode-rust.js"></script>
-        <script src="../../editor.js"></script>
-        <script src="../../theme-dawn.js"></script>
-        <script src="../../theme-tomorrow_night.js"></script>
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
 
-        <script src="../../elasticlunr.min.js"></script>
-        <script src="../../mark.min.js"></script>
-        <script src="../../searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="../../clipboard.min.js"></script>
-        <script src="../../highlight.js"></script>
-        <script src="../../book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 

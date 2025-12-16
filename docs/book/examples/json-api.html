@@ -201,39 +201,36 @@ struct Item {
     name: String,
     description: Option&lt;String&gt;,
     price: f64,
-    created_at: String,
 }
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Parse request body
     let input: CreateItem = match req.json() {
         Ok(data) =&gt; data,
         Err(e) =&gt; return Response::bad_request(format!("Invalid JSON: {}", e)),
     };
-    
+
     // Validate
     if input.name.is_empty() {
         return Response::bad_request("Name is required");
     }
-    
+
     if input.price &lt; 0.0 {
         return Response::bad_request("Price must be non-negative");
     }
-    
-    // Create item (in real app, save to database)
+
+    // Create item (in real app, save to database via ctx)
     let item = Item {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
         description: input.description,
         price: input.price,
-        created_at: chrono::Utc::now().to_rfc3339(),
     };
-    
+
     // Return 201 Created
     Response::created(item)
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h2 id="endpoint-configuration"><a class="header" href="#endpoint-configuration">Endpoint Configuration</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody>
@@ -257,42 +254,33 @@ handler_loop!(handle);
 }
 </code></pre>
 <h2 id="full-crud-example"><a class="header" href="#full-crud-example">Full CRUD Example</a></h2>
-<p>For a complete CRUD API, create multiple endpoints:</p>
+<p>For a complete CRUD API with database access:</p>
 <h3 id="get-items---list-items"><a class="header" href="#get-items---list-items">GET /items - List Items</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(_req: Request) -&gt; Response {
-    // In real app, fetch from database
-    let items = vec![
-        json!({"id": "1", "name": "Item 1"}),
-        json!({"id": "2", "name": "Item 2"}),
-    ];
-    
-    Response::ok(json!({
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, _req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let db = ctx.database("main-db").await?;
+    let items = db.query("SELECT id, name FROM items", &amp;[]).await?;
+
+    Ok(Response::ok(json!({
         "items": items,
         "count": items.len(),
-    }))
+    })))
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="get-itemsid---get-item"><a class="header" href="#get-itemsid---get-item">GET /items/{id} - Get Item</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    let id = match req.path_param("id") {
-        Some(id) =&gt; id,
-        None =&gt; return Response::bad_request("Missing ID"),
-    };
-    
-    // In real app, fetch from database
-    if id == "1" {
-        Response::ok(json!({
-            "id": "1",
-            "name": "Item 1",
-            "price": 9.99,
-        }))
-    } else {
-        Response::not_found()
-    }
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path_param("id")
+        .ok_or_else(|| HandlerError::ValidationError("Missing ID".into()))?;
+
+    let db = ctx.database("main-db").await?;
+    let item = db.query_one("SELECT * FROM items WHERE id = $1", &amp;[&amp;id]).await?;
+
+    Ok(Response::ok(item))
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="put-itemsid---update-item"><a class="header" href="#put-itemsid---update-item">PUT /items/{id} - Update Item</a></h3>
@@ -304,38 +292,34 @@ struct UpdateItem {
     price: Option&lt;f64&gt;,
 }
 
-fn handle(req: Request) -&gt; Response {
-    let id = match req.path_param("id") {
-        Some(id) =&gt; id.clone(),
-        None =&gt; return Response::bad_request("Missing ID"),
-    };
-    
-    let update: UpdateItem = match req.json() {
-        Ok(data) =&gt; data,
-        Err(e) =&gt; return Response::bad_request(format!("Invalid JSON: {}", e)),
-    };
-    
-    // In real app, update in database
-    Response::ok(json!({
-        "id": id,
-        "name": update.name.unwrap_or("Unchanged".to_string()),
-        "updated": true,
-    }))
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path_param("id")
+        .ok_or_else(|| HandlerError::ValidationError("Missing ID".into()))?;
+
+    let update: UpdateItem = req.json()?;
+
+    let db = ctx.database("main-db").await?;
+    db.execute(
+        "UPDATE items SET name = COALESCE($1, name), price = COALESCE($2, price) WHERE id = $3",
+        &amp;[&amp;update.name, &amp;update.price, &amp;id]
+    ).await?;
+
+    Ok(Response::ok(json!({"id": id, "updated": true})))
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="delete-itemsid---delete-item"><a class="header" href="#delete-itemsid---delete-item">DELETE /items/{id} - Delete Item</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    let id = match req.path_param("id") {
-        Some(id) =&gt; id,
-        None =&gt; return Response::bad_request("Missing ID"),
-    };
-    
-    // In real app, delete from database
-    eprintln!("Deleted item: {}", id);
-    
-    Response::no_content()
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path_param("id")
+        .ok_or_else(|| HandlerError::ValidationError("Missing ID".into()))?;
+
+    let db = ctx.database("main-db").await?;
+    db.execute("DELETE FROM items WHERE id = $1", &amp;[&amp;id]).await?;
+
+    Ok(Response::no_content())
 }
 <span class="boring">}</span></code></pre></pre>
 

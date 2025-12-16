@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Path Parameters - Rust Edge Gateway</title>
+        <title>Graceful Draining - Rust Edge Gateway</title>
 
 
         <!-- Custom HTML head -->
@@ -147,7 +147,7 @@
                         <a href="https://github.com/Senneseph/Rust-Edge-Gateway" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway/edit/master/docs/src/examples/path-params.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway/edit/master/docs/src/architecture/graceful-draining.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -181,168 +181,183 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="path-parameters"><a class="header" href="#path-parameters">Path Parameters</a></h1>
-<p>Extract dynamic values from URL paths.</p>
-<h2 id="basic-example"><a class="header" href="#basic-example">Basic Example</a></h2>
-<p><strong>Endpoint Path:</strong> <code>/users/{id}</code></p>
+                        <h1 id="graceful-draining"><a class="header" href="#graceful-draining">Graceful Draining</a></h1>
+<p>Graceful draining enables zero-downtime deployments by allowing old handlers to complete in-flight requests while new handlers receive new requests.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
+<p>Without graceful draining, updating a handler can cause:</p>
+<ul>
+<li><strong>Dropped requests</strong> - In-flight requests are terminated</li>
+<li><strong>Connection resets</strong> - Clients see connection errors</li>
+<li><strong>Data corruption</strong> - Partial operations may leave inconsistent state</li>
+</ul>
+<h2 id="the-solution"><a class="header" href="#the-solution">The Solution</a></h2>
+<p>Graceful draining solves this by:</p>
+<ol>
+<li><strong>Loading the new handler</strong> before removing the old one</li>
+<li><strong>Routing new requests</strong> to the new handler immediately</li>
+<li><strong>Allowing old requests</strong> to complete on the old handler</li>
+<li><strong>Unloading the old handler</strong> only when fully drained</li>
+</ol>
+<h2 id="timeline"><a class="header" href="#timeline">Timeline</a></h2>
+<pre><code>Time ──────────────────────────────────────────────────────────▶
+
+Old Handler:  ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+              (handling)  (draining)  (unloaded)
+
+New Handler:  ░░░░░░░░░░░░████████████████████████████████████████
+                          (handling new requests)
+
+                    ▲
+                    │ Swap point
+</code></pre>
+<h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
+<h3 id="1-request-tracking"><a class="header" href="#1-request-tracking">1. Request Tracking</a></h3>
+<p>Each handler tracks active requests using atomic counters:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use rust_edge_gateway_sdk::prelude::*;
-
-#[handler]
-pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
-    // Extract the {id} parameter
-    let user_id = match req.path_param("id") {
-        Some(id) =&gt; id,
-        None =&gt; return Response::bad_request("Missing user ID"),
-    };
-
-    Response::ok(json!({
-        "user_id": user_id,
-        "message": format!("Fetching user {}", user_id),
-    }))
+</span>pub struct LoadedHandler {
+    active_requests: AtomicU64,
+    draining: AtomicBool,
 }
 <span class="boring">}</span></code></pre></pre>
-<h2 id="test"><a class="header" href="#test">Test</a></h2>
-<pre><code class="language-bash">curl http://localhost:9080/users/123
-</code></pre>
-<h2 id="response"><a class="header" href="#response">Response</a></h2>
-<pre><code class="language-json">{
-  "user_id": "123",
-  "message": "Fetching user 123"
-}
-</code></pre>
-<h2 id="multiple-parameters"><a class="header" href="#multiple-parameters">Multiple Parameters</a></h2>
-<p><strong>Endpoint Path:</strong> <code>/users/{user_id}/posts/{post_id}</code></p>
+<h3 id="2-request-guards"><a class="header" href="#2-request-guards">2. Request Guards</a></h3>
+<p>When a request starts, a guard is acquired:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>#[handler]
-pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
-    let user_id = req.path_param("user_id");
-    let post_id = req.path_param("post_id");
+</span>let guard = handler.acquire_request()?;
+// Request is processed...
+// Guard is dropped when request completes
+<span class="boring">}</span></code></pre></pre>
+<p>The guard:</p>
+<ul>
+<li>Increments <code>active_requests</code> on creation</li>
+<li>Decrements <code>active_requests</code> on drop</li>
+<li>Returns <code>None</code> if handler is draining</li>
+</ul>
+<h3 id="3-graceful-swap"><a class="header" href="#3-graceful-swap">3. Graceful Swap</a></h3>
+<p>When swapping handlers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let result = registry.swap_graceful(
+    "my-endpoint",
+    new_library_path,
+    Duration::from_secs(30)  // drain timeout
+).await?;
+<span class="boring">}</span></code></pre></pre>
+<p>This:</p>
+<ol>
+<li>Loads the new handler</li>
+<li>Atomically swaps the active handler</li>
+<li>Marks the old handler as draining</li>
+<li>Spawns a background task to monitor draining</li>
+<li>Returns immediately (non-blocking)</li>
+</ol>
+<h3 id="4-drain-monitoring"><a class="header" href="#4-drain-monitoring">4. Drain Monitoring</a></h3>
+<p>A background task monitors the old handler:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>while !old_handler.is_drained() {
+    if elapsed &gt; drain_timeout {
+        // Force unload after timeout
+        break;
+    }
+    tokio::time::sleep(Duration::from_millis(100)).await;
+}
+// Old handler is now safe to unload
+<span class="boring">}</span></code></pre></pre>
+<h2 id="api"><a class="header" href="#api">API</a></h2>
+<h3 id="swap-with-draining"><a class="header" href="#swap-with-draining">Swap with Draining</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let result = registry.swap_graceful(
+    endpoint_id,
+    new_path,
+    drain_timeout
+).await?;
 
-    match (user_id, post_id) {
-        (Some(uid), Some(pid)) =&gt; {
-            Response::ok(json!({
-                "user_id": uid,
-                "post_id": pid,
-            }))
-        }
-        _ =&gt; Response::bad_request("Missing parameters"),
+// Result contains:
+// - swapped: bool - Whether swap succeeded
+// - old_requests_pending: u64 - Requests still in flight
+// - draining: bool - Whether old handler is draining
+<span class="boring">}</span></code></pre></pre>
+<h3 id="check-draining-status"><a class="header" href="#check-draining-status">Check Draining Status</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Is handler accepting new requests?
+let accepting = !handler.is_draining();
+
+// Is handler fully drained?
+let drained = handler.is_drained();
+
+// How many requests are in flight?
+let active = handler.active_request_count();
+<span class="boring">}</span></code></pre></pre>
+<h3 id="get-statistics"><a class="header" href="#get-statistics">Get Statistics</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let stats = registry.stats().await;
+
+println!("Active handlers: {}", stats.loaded_count);
+println!("Draining handlers: {}", stats.draining_count);
+println!("Active requests: {}", stats.active_requests);
+println!("Draining requests: {}", stats.draining_requests);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="drain-timeout"><a class="header" href="#drain-timeout">Drain Timeout</a></h2>
+<p>The drain timeout determines how long to wait for requests to complete:</p>
+<div class="table-wrapper"><table><thead><tr><th>Timeout</th><th>Use Case</th></tr></thead><tbody>
+<tr><td>5s</td><td>Fast APIs with quick responses</td></tr>
+<tr><td>30s</td><td>Standard web applications</td></tr>
+<tr><td>60s</td><td>Long-running operations</td></tr>
+<tr><td>300s</td><td>File uploads, batch processing</td></tr>
+</tbody></table>
+</div>
+<p>If the timeout expires, the old handler is forcefully unloaded. Any remaining requests will fail.</p>
+<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h3 id="1-set-appropriate-timeouts"><a class="header" href="#1-set-appropriate-timeouts">1. Set Appropriate Timeouts</a></h3>
+<p>Match your drain timeout to your longest expected request:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// For a file upload endpoint
+registry.swap_graceful(
+    "upload-endpoint",
+    new_path,
+    Duration::from_secs(300)  // 5 minutes for large uploads
+).await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="2-monitor-draining"><a class="header" href="#2-monitor-draining">2. Monitor Draining</a></h3>
+<p>Log draining status for observability:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>if result.draining {
+    tracing::info!(
+        endpoint = endpoint_id,
+        pending = result.old_requests_pending,
+        "Handler draining"
+    );
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="3-handle-drain-rejection"><a class="header" href="#3-handle-drain-rejection">3. Handle Drain Rejection</a></h3>
+<p>When a handler is draining, new requests are rejected:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>match handler.acquire_request() {
+    Some(guard) =&gt; {
+        // Process request
+    }
+    None =&gt; {
+        // Handler is draining, return 503
+        return Response::service_unavailable("Handler updating, retry shortly");
     }
 }
 <span class="boring">}</span></code></pre></pre>
-<h3 id="test-1"><a class="header" href="#test-1">Test</a></h3>
-<pre><code class="language-bash">curl http://localhost:9080/users/42/posts/7
-</code></pre>
-<h3 id="response-1"><a class="header" href="#response-1">Response</a></h3>
-<pre><code class="language-json">{
-  "user_id": "42",
-  "post_id": "7"
-}
-</code></pre>
-<h2 id="type-conversion"><a class="header" href="#type-conversion">Type Conversion</a></h2>
-<p>Path parameters are always strings. Convert them to other types:</p>
+<h3 id="4-cleanup-drained-handlers"><a class="header" href="#4-cleanup-drained-handlers">4. Cleanup Drained Handlers</a></h3>
+<p>Periodically clean up fully drained handlers:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>#[handler]
-pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
-    let id_str = match req.path_param("id") {
-        Some(id) =&gt; id,
-        None =&gt; return Response::bad_request("Missing ID"),
-    };
-
-    // Parse to integer
-    let id: i64 = match id_str.parse() {
-        Ok(n) =&gt; n,
-        Err(_) =&gt; return Response::bad_request("ID must be a number"),
-    };
-
-    // Parse to UUID
-    let uuid_str = match req.path_param("uuid") {
-        Some(u) =&gt; u,
-        None =&gt; return Response::bad_request("Missing UUID"),
-    };
-
-    let uuid = match uuid::Uuid::parse_str(uuid_str) {
-        Ok(u) =&gt; u,
-        Err(_) =&gt; return Response::bad_request("Invalid UUID format"),
-    };
-
-    Response::ok(json!({
-        "id": id,
-        "uuid": uuid.to_string(),
-    }))
-}
-<span class="boring">}</span></code></pre></pre>
-<h2 id="optional-parameters-with-defaults"><a class="header" href="#optional-parameters-with-defaults">Optional Parameters with Defaults</a></h2>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>#[handler]
-pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
-    // Get page number, default to 1
-    let page: u32 = req.path_param("page")
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(1);
-
-    Response::ok(json!({"page": page}))
-}
-<span class="boring">}</span></code></pre></pre>
-<h2 id="route-patterns"><a class="header" href="#route-patterns">Route Patterns</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Pattern</th><th>Matches</th><th>Parameters</th></tr></thead><tbody>
-<tr><td><code>/users/{id}</code></td><td><code>/users/123</code></td><td><code>id: "123"</code></td></tr>
-<tr><td><code>/api/{version}/items</code></td><td><code>/api/v2/items</code></td><td><code>version: "v2"</code></td></tr>
-<tr><td><code>/files/{path}</code></td><td><code>/files/docs</code></td><td><code>path: "docs"</code></td></tr>
-<tr><td><code>/{org}/{repo}/issues/{num}</code></td><td><code>/acme/proj/issues/42</code></td><td><code>org: "acme"</code>, <code>repo: "proj"</code>, <code>num: "42"</code></td></tr>
-</tbody></table>
-</div>
-<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
-<h3 id="resource-by-id"><a class="header" href="#resource-by-id">Resource by ID</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// GET /users/{id}
-#[handler]
-pub async fn get_user(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
-    let id = req.path_param("id").unwrap();
-    let db = ctx.database("main-db").await?;
-    let user = db.query_one("SELECT * FROM users WHERE id = $1", &amp;[&amp;id]).await?;
-    Ok(Response::ok(user))
-}
-<span class="boring">}</span></code></pre></pre>
-<h3 id="nested-resources"><a class="header" href="#nested-resources">Nested Resources</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// GET /organizations/{org_id}/teams/{team_id}/members
-#[handler]
-pub async fn get_team_members(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
-    let org_id = req.path_param("org_id").unwrap();
-    let team_id = req.path_param("team_id").unwrap();
-
-    let db = ctx.database("main-db").await?;
-    let members = db.query(
-        "SELECT * FROM members WHERE org_id = $1 AND team_id = $2",
-        &amp;[&amp;org_id, &amp;team_id]
-    ).await?;
-
-    Ok(Response::ok(json!({
-        "organization": org_id,
-        "team": team_id,
-        "members": members,
-    })))
-}
-<span class="boring">}</span></code></pre></pre>
-<h3 id="slug-based-routes"><a class="header" href="#slug-based-routes">Slug-based Routes</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// GET /blog/{slug}
-#[handler]
-pub async fn get_blog_post(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
-    let slug = req.path_param("slug").unwrap();
-
-    let db = ctx.database("main-db").await?;
-    let post = db.query_one("SELECT * FROM posts WHERE slug = $1", &amp;[&amp;slug]).await?;
-
-    Ok(Response::ok(post))
+</span>// In a background task
+loop {
+    registry.cleanup_drained().await;
+    tokio::time::sleep(Duration::from_secs(60)).await;
 }
 <span class="boring">}</span></code></pre></pre>
 
@@ -350,11 +365,11 @@ pub async fn get_blog_post(ctx: &amp;Context, req: Request) -&gt; Result&lt;Resp
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../examples/json-api.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../architecture/service-actors.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../examples/query-params.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../examples/hello-world.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -364,11 +379,11 @@ pub async fn get_blog_post(ctx: &amp;Context, req: Request) -&gt; Result&lt;Resp
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../examples/json-api.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../architecture/service-actors.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../examples/query-params.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../examples/hello-world.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

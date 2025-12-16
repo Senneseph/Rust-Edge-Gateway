@@ -349,11 +349,8 @@ pub async fn delete_endpoint(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<()>>, StatusCode> {
-    // Stop the worker if running
-    {
-        let mut workers = state.workers.write().await;
-        workers.stop_worker(&id);
-    }
+    // Unload the handler if running (v2 registry)
+    let _ = state.handler_registry.unload(&id).await;
 
     match state.db.delete_endpoint(&id) {
         Ok(_) => Ok(Json(ApiResponse::ok(()))),
@@ -423,8 +420,8 @@ pub async fn start_endpoint(
         Err(e) => return Ok(Json(ApiResponse::err(e.to_string()))),
     };
 
-    let mut workers = state.workers.write().await;
-    match workers.start_worker(&endpoint) {
+    // Use v2 handler registry to load the compiled handler
+    match state.handler_registry.load(&endpoint.id).await {
         Ok(_) => {
             state.db.update_endpoint(&Endpoint { enabled: true, ..endpoint }).ok();
             Ok(Json(ApiResponse::ok(())))
@@ -433,14 +430,16 @@ pub async fn start_endpoint(
     }
 }
 
-/// Stop an endpoint (kill worker)
+/// Stop an endpoint (unload handler from registry)
 pub async fn stop_endpoint(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<()>>, StatusCode> {
-    let mut workers = state.workers.write().await;
-    workers.stop_worker(&id);
-    Ok(Json(ApiResponse::ok(())))
+    // Use v2 handler registry to unload the handler
+    match state.handler_registry.unload(&id).await {
+        Ok(_) => Ok(Json(ApiResponse::ok(()))),
+        Err(e) => Ok(Json(ApiResponse::err(e.to_string()))),
+    }
 }
 
 // ============================================================================
@@ -991,13 +990,12 @@ pub async fn import_bundle(
         }
     }
 
-    // Start if requested (requires compile)
+    // Start if requested (requires compile) - use v2 handler registry
     if query.start && query.compile {
         for endpoint in &response.endpoints {
             if let Ok(Some(ep)) = state.db.get_endpoint(&endpoint.id) {
                 if ep.compiled {
-                    let mut workers = state.workers.write().await;
-                    match workers.start_worker(&ep) {
+                    match state.handler_registry.load(&ep.id).await {
                         Ok(_) => {
                             state.db.update_endpoint(&Endpoint { enabled: true, ..ep }).ok();
                             response.started += 1;

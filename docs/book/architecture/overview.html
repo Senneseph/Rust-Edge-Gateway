@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Path Parameters - Rust Edge Gateway</title>
+        <title>Overview - Rust Edge Gateway</title>
 
 
         <!-- Custom HTML head -->
@@ -147,7 +147,7 @@
                         <a href="https://github.com/Senneseph/Rust-Edge-Gateway" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway/edit/master/docs/src/examples/path-params.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway/edit/master/docs/src/architecture/overview.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -181,180 +181,130 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="path-parameters"><a class="header" href="#path-parameters">Path Parameters</a></h1>
-<p>Extract dynamic values from URL paths.</p>
-<h2 id="basic-example"><a class="header" href="#basic-example">Basic Example</a></h2>
-<p><strong>Endpoint Path:</strong> <code>/users/{id}</code></p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use rust_edge_gateway_sdk::prelude::*;
-
-#[handler]
-pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
-    // Extract the {id} parameter
-    let user_id = match req.path_param("id") {
-        Some(id) =&gt; id,
-        None =&gt; return Response::bad_request("Missing user ID"),
-    };
-
-    Response::ok(json!({
-        "user_id": user_id,
-        "message": format!("Fetching user {}", user_id),
-    }))
-}
-<span class="boring">}</span></code></pre></pre>
-<h2 id="test"><a class="header" href="#test">Test</a></h2>
-<pre><code class="language-bash">curl http://localhost:9080/users/123
+                        <h1 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture Overview</a></h1>
+<p>Rust Edge Gateway uses a dynamic library loading architecture with actor-based services for high performance and zero-downtime deployments.</p>
+<h2 id="high-level-architecture"><a class="header" href="#high-level-architecture">High-Level Architecture</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────────────┐
+│                        Edge Gateway                              │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │   Router    │  │   Admin     │  │    Handler Registry     │  │
+│  │  (Axum)     │  │   API       │  │  (Dynamic Libraries)    │  │
+│  └──────┬──────┘  └─────────────┘  └───────────┬─────────────┘  │
+│         │                                       │                │
+│         │         ┌─────────────────────────────┘                │
+│         │         │                                              │
+│         ▼         ▼                                              │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                    Service Actors                            ││
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    ││
+│  │  │ Database │  │  Cache   │  │ Storage  │  │  Email   │    ││
+│  │  │  Actor   │  │  Actor   │  │  Actor   │  │  Actor   │    ││
+│  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘    ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
 </code></pre>
-<h2 id="response"><a class="header" href="#response">Response</a></h2>
-<pre><code class="language-json">{
-  "user_id": "123",
-  "message": "Fetching user 123"
-}
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="router-axum"><a class="header" href="#router-axum">Router (Axum)</a></h3>
+<p>The main HTTP server built on Axum:</p>
+<ul>
+<li>Receives incoming HTTP requests</li>
+<li>Matches requests to endpoints by path, method, and domain</li>
+<li>Dispatches to the appropriate handler</li>
+<li>Returns responses to clients</li>
+</ul>
+<h3 id="handler-registry"><a class="header" href="#handler-registry">Handler Registry</a></h3>
+<p>Manages loaded handler libraries:</p>
+<ul>
+<li>Loads dynamic libraries (<code>.so</code>, <code>.dll</code>, <code>.dylib</code>)</li>
+<li>Maintains a map of endpoint ID to handler function</li>
+<li>Supports hot-swapping with graceful draining</li>
+<li>Tracks active requests per handler</li>
+</ul>
+<h3 id="service-actors"><a class="header" href="#service-actors">Service Actors</a></h3>
+<p>Background tasks that manage backend connections:</p>
+<ul>
+<li><strong>Database Actor</strong> - Connection pooling for SQL databases</li>
+<li><strong>Cache Actor</strong> - Redis/Memcached connections</li>
+<li><strong>Storage Actor</strong> - S3/MinIO object storage</li>
+<li><strong>Email Actor</strong> - SMTP connections</li>
+</ul>
+<p>Actors communicate via message-passing channels, providing isolation and thread-safety.</p>
+<h3 id="admin-api"><a class="header" href="#admin-api">Admin API</a></h3>
+<p>RESTful API for management:</p>
+<ul>
+<li>Create/update/delete endpoints</li>
+<li>Compile handler code</li>
+<li>Deploy/undeploy handlers</li>
+<li>Configure services</li>
+<li>View logs and metrics</li>
+</ul>
+<h2 id="request-flow"><a class="header" href="#request-flow">Request Flow</a></h2>
+<ol>
+<li><strong>Request arrives</strong> at the Axum router</li>
+<li><strong>Router matches</strong> the request to an endpoint</li>
+<li><strong>Handler Registry</strong> looks up the handler by endpoint ID</li>
+<li><strong>Request guard</strong> is acquired (for draining support)</li>
+<li><strong>Handler function</strong> is called with Context and Request</li>
+<li><strong>Handler accesses services</strong> via Context (sends messages to actors)</li>
+<li><strong>Response is returned</strong> to the router</li>
+<li><strong>Request guard</strong> is dropped (decrements active count)</li>
+<li><strong>Router sends</strong> response to client</li>
+</ol>
+<h2 id="handler-compilation"><a class="header" href="#handler-compilation">Handler Compilation</a></h2>
+<p>When you compile a handler:</p>
+<ol>
+<li><strong>Code is written</strong> to <code>handlers/{id}/src/lib.rs</code></li>
+<li><strong>Cargo.toml</strong> is generated with SDK dependency</li>
+<li><strong><code>cargo build --release</code></strong> compiles to dynamic library</li>
+<li><strong>Library is stored</strong> in <code>handlers/{id}/target/release/</code></li>
+</ol>
+<p>The generated library exports a <code>handler_entry</code> symbol that the registry loads.</p>
+<h2 id="hot-swapping"><a class="header" href="#hot-swapping">Hot Swapping</a></h2>
+<p>When you update a handler:</p>
+<ol>
+<li><strong>New library is compiled</strong></li>
+<li><strong>New library is loaded</strong> into memory</li>
+<li><strong>Registry atomically swaps</strong> the handler pointer</li>
+<li><strong>Old handler starts draining</strong> (no new requests)</li>
+<li><strong>Active requests complete</strong> on old handler</li>
+<li><strong>Old library is unloaded</strong> when drained</li>
+</ol>
+<p>This provides zero-downtime deployments.</p>
+<h2 id="service-actor-pattern"><a class="header" href="#service-actor-pattern">Service Actor Pattern</a></h2>
+<p>Services use the actor pattern for safety and efficiency:</p>
+<pre><code>┌──────────┐     ┌─────────────┐     ┌──────────────┐
+│ Handler  │────▶│   Channel   │────▶│ Service Actor│
+│          │     │  (mpsc)     │     │              │
+│          │◀────│             │◀────│  (owns pool) │
+└──────────┘     └─────────────┘     └──────────────┘
 </code></pre>
-<h2 id="multiple-parameters"><a class="header" href="#multiple-parameters">Multiple Parameters</a></h2>
-<p><strong>Endpoint Path:</strong> <code>/users/{user_id}/posts/{post_id}</code></p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>#[handler]
-pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
-    let user_id = req.path_param("user_id");
-    let post_id = req.path_param("post_id");
-
-    match (user_id, post_id) {
-        (Some(uid), Some(pid)) =&gt; {
-            Response::ok(json!({
-                "user_id": uid,
-                "post_id": pid,
-            }))
-        }
-        _ =&gt; Response::bad_request("Missing parameters"),
-    }
-}
-<span class="boring">}</span></code></pre></pre>
-<h3 id="test-1"><a class="header" href="#test-1">Test</a></h3>
-<pre><code class="language-bash">curl http://localhost:9080/users/42/posts/7
-</code></pre>
-<h3 id="response-1"><a class="header" href="#response-1">Response</a></h3>
-<pre><code class="language-json">{
-  "user_id": "42",
-  "post_id": "7"
-}
-</code></pre>
-<h2 id="type-conversion"><a class="header" href="#type-conversion">Type Conversion</a></h2>
-<p>Path parameters are always strings. Convert them to other types:</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>#[handler]
-pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
-    let id_str = match req.path_param("id") {
-        Some(id) =&gt; id,
-        None =&gt; return Response::bad_request("Missing ID"),
-    };
-
-    // Parse to integer
-    let id: i64 = match id_str.parse() {
-        Ok(n) =&gt; n,
-        Err(_) =&gt; return Response::bad_request("ID must be a number"),
-    };
-
-    // Parse to UUID
-    let uuid_str = match req.path_param("uuid") {
-        Some(u) =&gt; u,
-        None =&gt; return Response::bad_request("Missing UUID"),
-    };
-
-    let uuid = match uuid::Uuid::parse_str(uuid_str) {
-        Ok(u) =&gt; u,
-        Err(_) =&gt; return Response::bad_request("Invalid UUID format"),
-    };
-
-    Response::ok(json!({
-        "id": id,
-        "uuid": uuid.to_string(),
-    }))
-}
-<span class="boring">}</span></code></pre></pre>
-<h2 id="optional-parameters-with-defaults"><a class="header" href="#optional-parameters-with-defaults">Optional Parameters with Defaults</a></h2>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>#[handler]
-pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
-    // Get page number, default to 1
-    let page: u32 = req.path_param("page")
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(1);
-
-    Response::ok(json!({"page": page}))
-}
-<span class="boring">}</span></code></pre></pre>
-<h2 id="route-patterns"><a class="header" href="#route-patterns">Route Patterns</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Pattern</th><th>Matches</th><th>Parameters</th></tr></thead><tbody>
-<tr><td><code>/users/{id}</code></td><td><code>/users/123</code></td><td><code>id: "123"</code></td></tr>
-<tr><td><code>/api/{version}/items</code></td><td><code>/api/v2/items</code></td><td><code>version: "v2"</code></td></tr>
-<tr><td><code>/files/{path}</code></td><td><code>/files/docs</code></td><td><code>path: "docs"</code></td></tr>
-<tr><td><code>/{org}/{repo}/issues/{num}</code></td><td><code>/acme/proj/issues/42</code></td><td><code>org: "acme"</code>, <code>repo: "proj"</code>, <code>num: "42"</code></td></tr>
+<p>Benefits:</p>
+<ul>
+<li><strong>Thread-safe</strong> - No shared mutable state</li>
+<li><strong>Isolated</strong> - Actor failures don't crash handlers</li>
+<li><strong>Efficient</strong> - Connection pools are reused</li>
+<li><strong>Backpressure</strong> - Channel buffers prevent overload</li>
+</ul>
+<h2 id="comparison-with-v1"><a class="header" href="#comparison-with-v1">Comparison with v1</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>v1 (Subprocess)</th><th>v2 (Dynamic Library)</th></tr></thead><tbody>
+<tr><td>Execution</td><td>Child process</td><td>Direct function call</td></tr>
+<tr><td>IPC</td><td>stdin/stdout JSON</td><td>None (in-process)</td></tr>
+<tr><td>Latency</td><td>~1-5ms overhead</td><td>~0.01ms overhead</td></tr>
+<tr><td>Memory</td><td>Separate per handler</td><td>Shared with gateway</td></tr>
+<tr><td>Hot Swap</td><td>Restart process</td><td>Atomic pointer swap</td></tr>
+<tr><td>Draining</td><td>Kill process</td><td>Graceful completion</td></tr>
 </tbody></table>
 </div>
-<h2 id="common-patterns"><a class="header" href="#common-patterns">Common Patterns</a></h2>
-<h3 id="resource-by-id"><a class="header" href="#resource-by-id">Resource by ID</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// GET /users/{id}
-#[handler]
-pub async fn get_user(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
-    let id = req.path_param("id").unwrap();
-    let db = ctx.database("main-db").await?;
-    let user = db.query_one("SELECT * FROM users WHERE id = $1", &amp;[&amp;id]).await?;
-    Ok(Response::ok(user))
-}
-<span class="boring">}</span></code></pre></pre>
-<h3 id="nested-resources"><a class="header" href="#nested-resources">Nested Resources</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// GET /organizations/{org_id}/teams/{team_id}/members
-#[handler]
-pub async fn get_team_members(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
-    let org_id = req.path_param("org_id").unwrap();
-    let team_id = req.path_param("team_id").unwrap();
-
-    let db = ctx.database("main-db").await?;
-    let members = db.query(
-        "SELECT * FROM members WHERE org_id = $1 AND team_id = $2",
-        &amp;[&amp;org_id, &amp;team_id]
-    ).await?;
-
-    Ok(Response::ok(json!({
-        "organization": org_id,
-        "team": team_id,
-        "members": members,
-    })))
-}
-<span class="boring">}</span></code></pre></pre>
-<h3 id="slug-based-routes"><a class="header" href="#slug-based-routes">Slug-based Routes</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// GET /blog/{slug}
-#[handler]
-pub async fn get_blog_post(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
-    let slug = req.path_param("slug").unwrap();
-
-    let db = ctx.database("main-db").await?;
-    let post = db.query_one("SELECT * FROM posts WHERE slug = $1", &amp;[&amp;slug]).await?;
-
-    Ok(Response::ok(post))
-}
-<span class="boring">}</span></code></pre></pre>
-
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../examples/json-api.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../sdk/services/email.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../examples/query-params.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../architecture/handler-registry.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -364,11 +314,11 @@ pub async fn get_blog_post(ctx: &amp;Context, req: Request) -&gt; Result&lt;Resp
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../examples/json-api.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../sdk/services/email.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../examples/query-params.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../architecture/handler-registry.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

@@ -180,33 +180,34 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="rust-edge-gateway"><a class="header" href="#rust-edge-gateway">Rust Edge Gateway</a></h1>
-<p><strong>Rust Edge Gateway</strong> is a high-performance API gateway that lets you write request handlers in Rust. Your handlers are compiled to native binaries and run as isolated worker processes, providing:</p>
+<p><strong>Rust Edge Gateway</strong> is a high-performance API gateway that lets you write request handlers in Rust. Your handlers are compiled to native dynamic libraries and loaded directly into the gateway process, providing:</p>
 <ul>
-<li>🚀 <strong>Native Performance</strong> - Handlers compile to optimized native code</li>
-<li>🔒 <strong>Isolation</strong> - Each handler runs in its own process</li>
-<li>🔄 <strong>Hot Reload</strong> - Update handlers without restarting the gateway</li>
-<li>🛠️ <strong>Simple SDK</strong> - Easy-to-use Request/Response API</li>
-<li>📦 <strong>Service Integration</strong> - Connect to databases, Redis, and more</li>
+<li>🚀 <strong>Native Performance</strong> - Handlers compile to optimized native code (.so/.dll)</li>
+<li>⚡ <strong>Zero-Copy Execution</strong> - Direct function calls, no serialization overhead</li>
+<li>🔄 <strong>Hot Reload</strong> - Swap handlers without restarting the gateway</li>
+<li>🎭 <strong>Actor-Based Services</strong> - Database, cache, and storage via message-passing</li>
+<li>🔀 <strong>Graceful Draining</strong> - Zero-downtime deployments with request draining</li>
+<li>🛠️ <strong>Simple SDK</strong> - Easy-to-use Context, Request, and Response API</li>
 </ul>
 <h2 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h2>
 <pre><code>┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   Client    │────▶│  Edge Gateway    │────▶│  Your Handler   │
-│  (Browser,  │     │  (Routes &amp;       │     │  (Compiled      │
-│   API, etc) │◀────│   Manages)       │◀────│   Rust Binary)  │
+│  (Browser,  │     │  (Routes &amp;       │     │  (Dynamic       │
+│   API, etc) │◀────│   Manages)       │◀────│   Library .so)  │
 └─────────────┘     └──────────────────┘     └─────────────────┘
                             │
                             ▼
                     ┌───────────────┐
-                    │   Services    │
-                    │  (DB, Redis,  │
-                    │   MinIO, etc) │
+                    │ Service Actors│
+                    │  (DB, Cache,  │
+                    │   Storage)    │
                     └───────────────┘
 </code></pre>
 <ol>
 <li><strong>Gateway receives request</strong> - The gateway matches the incoming request to an endpoint</li>
-<li><strong>Handler is invoked</strong> - The compiled handler binary receives the request via IPC</li>
-<li><strong>Handler processes</strong> - Your code runs, optionally using injected services</li>
-<li><strong>Response returned</strong> - The handler sends the response back through the gateway</li>
+<li><strong>Handler is invoked</strong> - The compiled handler library is called directly via function pointer</li>
+<li><strong>Handler processes</strong> - Your code runs with access to the Context API and Service Actors</li>
+<li><strong>Response returned</strong> - The handler returns a Response directly to the gateway</li>
 </ol>
 <h2 id="getting-started"><a class="header" href="#getting-started">Getting Started</a></h2>
 <p>The fastest way to get started is to:</p>
@@ -214,7 +215,7 @@
 <li>Access the Admin UI at <code>/admin/</code></li>
 <li>Create a new endpoint</li>
 <li>Write your handler code</li>
-<li>Compile and test</li>
+<li>Compile and deploy</li>
 </ol>
 <p>See the <a href="./getting-started/quick-start.html">Quick Start</a> guide for detailed instructions.</p>
 <h2 id="sdk-overview"><a class="header" href="#sdk-overview">SDK Overview</a></h2>
@@ -223,36 +224,38 @@
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     Response::ok(json!({
         "message": "Hello, World!",
         "path": req.path,
         "method": req.method,
     }))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <p>The SDK provides:</p>
 <ul>
+<li><strong><a href="./sdk/context.html">Context</a></strong> - Access to Service Actors (database, cache, storage)</li>
 <li><strong><a href="./sdk/request.html">Request</a></strong> - Access HTTP method, path, headers, body, query params</li>
 <li><strong><a href="./sdk/response.html">Response</a></strong> - Build HTTP responses with JSON, text, or custom content</li>
 <li><strong><a href="./sdk/errors.html">HandlerError</a></strong> - Structured error handling with HTTP status codes</li>
-<li><strong><a href="./sdk/services.html">Services</a></strong> - Database, Redis, and other service integrations</li>
+<li><strong><a href="./sdk/services.html">Services</a></strong> - Database, cache, and storage service actors</li>
 </ul>
 <h2 id="architecture"><a class="header" href="#architecture">Architecture</a></h2>
-<p>Rust Edge Gateway uses a worker process model:</p>
+<p>Rust Edge Gateway uses a dynamic library loading model with actor-based services:</p>
 <ul>
 <li><strong>Main Gateway</strong> - Axum-based HTTP server handling routing</li>
-<li><strong>Worker Processes</strong> - Your compiled handlers as standalone binaries</li>
-<li><strong>IPC Protocol</strong> - Length-prefixed JSON over stdin/stdout</li>
-<li><strong>Service Connectors</strong> - Pooled connections to backends (DB, Redis, etc.)</li>
+<li><strong>Handler Registry</strong> - Manages loaded handler libraries with hot-swap support</li>
+<li><strong>Dynamic Libraries</strong> - Your compiled handlers as <code>.so</code> (Linux), <code>.dll</code> (Windows), or <code>.dylib</code> (macOS)</li>
+<li><strong>Service Actors</strong> - Message-passing based services for database, cache, and storage</li>
+<li><strong>Graceful Draining</strong> - Old handlers complete in-flight requests during updates</li>
 </ul>
 <p>This architecture provides:</p>
 <ul>
-<li><strong>Security</strong> - Handlers can't directly access the gateway's memory</li>
-<li><strong>Stability</strong> - A crashed handler doesn't bring down the gateway</li>
-<li><strong>Scalability</strong> - Multiple worker instances can handle concurrent requests</li>
+<li><strong>Performance</strong> - Direct function calls with zero serialization overhead</li>
+<li><strong>Hot Swapping</strong> - Replace handlers without gateway restart</li>
+<li><strong>Zero Downtime</strong> - Graceful draining ensures no dropped requests during updates</li>
+<li><strong>Scalability</strong> - Async handlers with Tokio runtime for high concurrency</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h1>
 <p>This guide will help you create your first Rust Edge Gateway endpoint in under 5 minutes.</p>
@@ -288,29 +291,28 @@ handler_loop!(handle);
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     Response::ok(json!({
         "message": "Hello from Rust Edge Gateway!",
         "path": req.path,
         "method": req.method,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
     }))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h2 id="step-4-compile"><a class="header" href="#step-4-compile">Step 4: Compile</a></h2>
 <p>Click the <strong>"Compile"</strong> button. The gateway will:</p>
 <ol>
 <li>Generate a Cargo project with your code</li>
-<li>Compile it to a native binary</li>
+<li>Compile it to a dynamic library (<code>.so</code>/<code>.dll</code>)</li>
 <li>Report success or any compilation errors</li>
 </ol>
 <p>You should see a success message like:</p>
 <pre><code>✓ Compiled successfully in 2.3s
 </code></pre>
-<h2 id="step-5-start-the-endpoint"><a class="header" href="#step-5-start-the-endpoint">Step 5: Start the Endpoint</a></h2>
-<p>Click <strong>"Start"</strong> to activate the endpoint. The status should change to <strong>Running</strong>.</p>
+<h2 id="step-5-deploy-the-endpoint"><a class="header" href="#step-5-deploy-the-endpoint">Step 5: Deploy the Endpoint</a></h2>
+<p>Click <strong>"Deploy"</strong> to load the handler. The status should change to <strong>Loaded</strong>.</p>
+<p>The handler is now active and receiving requests - no separate "start" step needed!</p>
 <h2 id="step-6-test-your-endpoint"><a class="header" href="#step-6-test-your-endpoint">Step 6: Test Your Endpoint</a></h2>
 <p>Make a request to your endpoint:</p>
 <pre><code class="language-bash">curl http://localhost:9080/hello
@@ -319,14 +321,14 @@ handler_loop!(handle);
 <pre><code class="language-json">{
   "message": "Hello from Rust Edge Gateway!",
   "path": "/hello",
-  "method": "GET",
-  "timestamp": "2024-01-15T10:30:00.000Z"
+  "method": "GET"
 }
 </code></pre>
 <h2 id="whats-next"><a class="header" href="#whats-next">What's Next?</a></h2>
 <ul>
 <li><a href="getting-started/./first-handler.html">Your First Handler</a> - Deeper dive into handler structure</li>
-<li><a href="getting-started/./lifecycle.html">Handler Lifecycle</a> - Understand compilation and execution</li>
+<li><a href="getting-started/./lifecycle.html">Handler Lifecycle</a> - Understand compilation, loading, and hot-swapping</li>
+<li><a href="getting-started/../sdk/context.html">Context API</a> - Access services via the Context</li>
 <li><a href="getting-started/../sdk/request.html">Request API</a> - Access headers, body, parameters</li>
 <li><a href="getting-started/../sdk/response.html">Response API</a> - Build JSON, text, and custom responses</li>
 <li><a href="getting-started/../examples/hello-world.html">Examples</a> - More code examples</li>
@@ -338,35 +340,35 @@ handler_loop!(handle);
 <li>Missing dependencies (add to your handler's <code>use</code> statements)</li>
 <li>Syntax errors (Rust compiler messages are helpful!)</li>
 <li>Type mismatches</li>
+<li>Missing <code>#[handler]</code> attribute</li>
 </ul>
 <h3 id="endpoint-not-responding"><a class="header" href="#endpoint-not-responding">Endpoint Not Responding</a></h3>
 <ol>
-<li>Check the endpoint is in <strong>Running</strong> status</li>
+<li>Check the endpoint is in <strong>Loaded</strong> status</li>
 <li>Verify the path matches exactly (paths are case-sensitive)</li>
 <li>Check the method matches your request</li>
 <li>View endpoint logs in the admin UI</li>
 </ol>
-<h3 id="handler-crashes"><a class="header" href="#handler-crashes">Handler Crashes</a></h3>
+<h3 id="handler-errors"><a class="header" href="#handler-errors">Handler Errors</a></h3>
 <p>View the logs to see panic messages or error output. Common causes:</p>
 <ul>
 <li>Unwrapping <code>None</code> or <code>Err</code> values</li>
-<li>Stack overflow from deep recursion</li>
 <li>Accessing invalid JSON fields</li>
+<li>Service actor communication errors</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="your-first-handler"><a class="header" href="#your-first-handler">Your First Handler</a></h1>
-<p>This guide explains the structure of a handler and how to work with requests and responses.</p>
+<p>This guide explains the structure of a handler and how to work with the Context, Request, and Response.</p>
 <h2 id="handler-structure"><a class="header" href="#handler-structure">Handler Structure</a></h2>
 <p>Every handler follows the same pattern:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     // Your logic here
     Response::ok(json!({"status": "success"}))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h3 id="the-prelude"><a class="header" href="#the-prelude">The Prelude</a></h3>
 <p>The <code>prelude</code> module imports everything you typically need:</p>
@@ -375,41 +377,45 @@ handler_loop!(handle);
 </span>use rust_edge_gateway_sdk::prelude::*;
 
 // This imports:
+// - Context for service access
 // - Request, Response types
 // - serde::{Deserialize, Serialize}
 // - serde_json::{json, Value as JsonValue}
-// - read_request, send_response IPC functions
 // - HandlerError for error handling
+// - The #[handler] attribute macro
 <span class="boring">}</span></code></pre></pre>
 <h3 id="the-handler-function"><a class="header" href="#the-handler-function">The Handler Function</a></h3>
-<p>Your handler function receives a <code>Request</code> and returns a <code>Response</code>:</p>
+<p>Your handler function receives a <code>Context</code> and <code>Request</code>, and returns a <code>Response</code>:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     // Access request data
     let method = &amp;req.method;  // "GET", "POST", etc.
     let path = &amp;req.path;      // "/users/123"
-    
+
+    // Access services via ctx (database, cache, storage)
+    // let db = ctx.database();
+
     // Return a response
     Response::ok(json!({"received": path}))
 }
 <span class="boring">}</span></code></pre></pre>
-<h3 id="the-handler-loop-macro"><a class="header" href="#the-handler-loop-macro">The Handler Loop Macro</a></h3>
-<p>The <code>handler_loop!</code> macro sets up the main function and IPC loop:</p>
-<pre><pre class="playground"><code class="language-rust">handler_loop!(handle);
+<h3 id="the-handler-attribute"><a class="header" href="#the-handler-attribute">The Handler Attribute</a></h3>
+<p>The <code>#[handler]</code> attribute macro generates the entry point for the dynamic library:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // ...
+}
 
-// This expands to:
-fn main() {
-    loop {
-        match read_request() {
-            Ok(req) =&gt; {
-                let response = handle(req);
-                send_response(response).unwrap();
-            }
-            Err(_) =&gt; break,
-        }
-    }
-}</code></pre></pre>
+// This generates:
+// #[no_mangle]
+// pub extern "C" fn handler_entry(ctx: &amp;Context, req: Request) -&gt; Pin&lt;Box&lt;dyn Future&lt;Output = Response&gt; + Send&gt;&gt; {
+//     Box::pin(handle(ctx, req))
+// }
+<span class="boring">}</span></code></pre></pre>
 <h2 id="working-with-requests"><a class="header" href="#working-with-requests">Working with Requests</a></h2>
 <h3 id="accessing-the-body"><a class="header" href="#accessing-the-body">Accessing the Body</a></h3>
 <p>For POST/PUT requests, parse the JSON body:</p>
@@ -421,13 +427,14 @@ struct CreateUser {
     email: String,
 }
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     // Parse JSON body
     let user: CreateUser = match req.json() {
         Ok(u) =&gt; u,
         Err(e) =&gt; return Response::bad_request(format!("Invalid JSON: {}", e)),
     };
-    
+
     Response::created(json!({
         "id": "new-user-id",
         "name": user.name,
@@ -439,10 +446,11 @@ fn handle(req: Request) -&gt; Response {
 <p>Extract dynamic path segments (e.g., <code>/users/{id}</code>):</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     let user_id = req.path_param("id")
         .ok_or_else(|| "Missing user ID")?;
-    
+
     Response::ok(json!({"user_id": user_id}))
 }
 <span class="boring">}</span></code></pre></pre>
@@ -450,15 +458,16 @@ fn handle(req: Request) -&gt; Response {
 <p>Access query string values (e.g., <code>?page=1&amp;limit=10</code>):</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     let page = req.query_param("page")
         .map(|s| s.parse::&lt;u32&gt;().unwrap_or(1))
         .unwrap_or(1);
-    
+
     let limit = req.query_param("limit")
         .map(|s| s.parse::&lt;u32&gt;().unwrap_or(10))
         .unwrap_or(10);
-    
+
     Response::ok(json!({
         "page": page,
         "limit": limit,
@@ -469,14 +478,15 @@ fn handle(req: Request) -&gt; Response {
 <p>Access HTTP headers (case-insensitive):</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     let auth = req.header("Authorization");
     let content_type = req.header("Content-Type");
-    
+
     if auth.is_none() {
         return Response::json(401, json!({"error": "Unauthorized"}));
     }
-    
+
     Response::ok(json!({"authenticated": true}))
 }
 <span class="boring">}</span></code></pre></pre>
@@ -518,21 +528,43 @@ Response::internal_error("Something broke")  // 500
 Response::text(200, "&lt;html&gt;&lt;body&gt;Hello&lt;/body&gt;&lt;/html&gt;")
     .with_header("Content-Type", "text/html")
 <span class="boring">}</span></code></pre></pre>
+<h2 id="using-the-context"><a class="header" href="#using-the-context">Using the Context</a></h2>
+<p>The <code>Context</code> provides access to Service Actors:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // Access database service
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users").await?;
+
+    // Access cache service
+    let cache = ctx.cache("redis").await?;
+    cache.set("key", "value", 300).await?;
+
+    // Access storage service
+    let storage = ctx.storage("s3").await?;
+    storage.put("file.txt", data).await?;
+
+    Response::ok(json!({"users": users}))
+}
+<span class="boring">}</span></code></pre></pre>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
-<li><a href="getting-started/./lifecycle.html">Handler Lifecycle</a> - Compilation and process management</li>
+<li><a href="getting-started/./lifecycle.html">Handler Lifecycle</a> - Compilation, loading, and hot-swapping</li>
+<li><a href="getting-started/../sdk/context.html">Context API</a> - Service access via Context</li>
 <li><a href="getting-started/../sdk/errors.html">Error Handling</a> - Structured error handling</li>
 <li><a href="getting-started/../examples/hello-world.html">Examples</a> - More code examples</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="handler-lifecycle"><a class="header" href="#handler-lifecycle">Handler Lifecycle</a></h1>
-<p>Understanding how handlers are compiled, started, and managed helps you write more reliable code.</p>
+<p>Understanding how handlers are compiled, loaded, and managed helps you write more reliable code.</p>
 <h2 id="endpoint-states"><a class="header" href="#endpoint-states">Endpoint States</a></h2>
 <p>An endpoint can be in one of these states:</p>
 <div class="table-wrapper"><table><thead><tr><th>State</th><th>Description</th></tr></thead><tbody>
 <tr><td><strong>Created</strong></td><td>Endpoint defined but code not yet compiled</td></tr>
-<tr><td><strong>Compiled</strong></td><td>Code compiled successfully, ready to start</td></tr>
-<tr><td><strong>Running</strong></td><td>Worker process is active and handling requests</td></tr>
-<tr><td><strong>Stopped</strong></td><td>Worker process stopped, can be restarted</td></tr>
+<tr><td><strong>Compiled</strong></td><td>Code compiled to dynamic library, ready to load</td></tr>
+<tr><td><strong>Loaded</strong></td><td>Handler library loaded into gateway, handling requests</td></tr>
+<tr><td><strong>Draining</strong></td><td>Old handler finishing in-flight requests during update</td></tr>
 <tr><td><strong>Error</strong></td><td>Compilation or runtime error occurred</td></tr>
 </tbody></table>
 </div>
@@ -540,10 +572,10 @@ Response::text(200, "&lt;html&gt;&lt;body&gt;Hello&lt;/body&gt;&lt;/html&gt;")
 <p>When you click "Compile", the gateway:</p>
 <ol>
 <li><strong>Creates a Cargo project</strong> in the handlers directory</li>
-<li><strong>Writes your code</strong> to <code>src/main.rs</code></li>
-<li><strong>Generates Cargo.toml</strong> with the SDK dependency</li>
+<li><strong>Writes your code</strong> to <code>src/lib.rs</code></li>
+<li><strong>Generates Cargo.toml</strong> with the SDK dependency and <code>cdylib</code> crate type</li>
 <li><strong>Runs <code>cargo build --release</code></strong> to compile</li>
-<li><strong>Stores the binary</strong> for execution</li>
+<li><strong>Produces a dynamic library</strong> (<code>.so</code>, <code>.dll</code>, or <code>.dylib</code>)</li>
 </ol>
 <h3 id="generated-project-structure"><a class="header" href="#generated-project-structure">Generated Project Structure</a></h3>
 <pre><code>handlers/
@@ -551,150 +583,170 @@ Response::text(200, "&lt;html&gt;&lt;body&gt;Hello&lt;/body&gt;&lt;/html&gt;")
     ├── Cargo.toml
     ├── Cargo.lock
     ├── src/
-    │   └── main.rs    # Your handler code
+    │   └── lib.rs    # Your handler code
     └── target/
         └── release/
-            └── handler  # Compiled binary
+            └── libhandler_{id}.so  # Compiled library (Linux)
 </code></pre>
 <h3 id="cargotoml"><a class="header" href="#cargotoml">Cargo.toml</a></h3>
-<p>The generated Cargo.toml includes the SDK:</p>
+<p>The generated Cargo.toml includes the SDK and configures a dynamic library:</p>
 <pre><code class="language-toml">[package]
-name = "handler"
+name = "handler_{endpoint_id}"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
 rust-edge-gateway-sdk = { path = "../../crates/rust-edge-gateway-sdk" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 </code></pre>
-<p>You can request additional dependencies by using them in your code - the gateway will detect common crates like <code>chrono</code>, <code>uuid</code>, <code>regex</code>, etc.</p>
-<h2 id="worker-processes"><a class="header" href="#worker-processes">Worker Processes</a></h2>
-<h3 id="starting-a-handler"><a class="header" href="#starting-a-handler">Starting a Handler</a></h3>
-<p>When you start an endpoint:</p>
+<h2 id="handler-loading"><a class="header" href="#handler-loading">Handler Loading</a></h2>
+<h3 id="loading-a-handler"><a class="header" href="#loading-a-handler">Loading a Handler</a></h3>
+<p>When you deploy an endpoint:</p>
 <ol>
-<li>Gateway spawns the compiled binary as a child process</li>
-<li>IPC channels are established (stdin/stdout)</li>
-<li>Worker enters its request loop</li>
-<li>Status changes to "Running"</li>
+<li>Gateway loads the dynamic library using <code>libloading</code></li>
+<li>Locates the <code>handler_entry</code> symbol (function pointer)</li>
+<li>Registers the handler in the <code>HandlerRegistry</code></li>
+<li>Status changes to "Loaded"</li>
 </ol>
 <h3 id="request-flow"><a class="header" href="#request-flow">Request Flow</a></h3>
-<pre><code>┌─────────┐     ┌──────────┐     ┌────────┐
-│ Gateway │────▶│  stdin   │────▶│ Worker │
-│         │     │ (request)│     │        │
-│         │◀────│  stdout  │◀────│        │
-│         │     │(response)│     │        │
-└─────────┘     └──────────┘     └────────┘
+<pre><code>┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Request   │────▶│  HandlerRegistry │────▶│  handler_entry  │
+│             │     │  (lookup by ID)  │     │  (fn pointer)   │
+│             │◀────│                  │◀────│                 │
+└─────────────┘     └──────────────────┘     └─────────────────┘
 </code></pre>
-<p>The IPC protocol uses length-prefixed JSON:</p>
-<ul>
-<li>4 bytes: message length (big-endian u32)</li>
-<li>N bytes: JSON payload</li>
-</ul>
-<h3 id="worker-loop"><a class="header" href="#worker-loop">Worker Loop</a></h3>
-<p>Your handler runs in a loop:</p>
+<p>The handler is called directly via function pointer - no serialization or IPC overhead.</p>
+<h3 id="handler-function"><a class="header" href="#handler-function">Handler Function</a></h3>
+<p>Your handler is an async function that receives a Context and Request:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>loop {
-    // 1. Read request from stdin
-    let request = read_request()?;
-    
-    // 2. Call your handler function
-    let response = handle(request);
-    
-    // 3. Write response to stdout
-    send_response(response)?;
+</span>use rust_edge_gateway_sdk::prelude::*;
+
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // Access services via ctx
+    // Process request
+    // Return response
+    Response::ok(json!({"status": "success"}))
 }
 <span class="boring">}</span></code></pre></pre>
-<p>The loop exits when:</p>
-<ul>
-<li>stdin is closed (gateway stopped the worker)</li>
-<li>An IPC error occurs</li>
-<li>The process is killed</li>
-</ul>
-<h3 id="stopping-a-handler"><a class="header" href="#stopping-a-handler">Stopping a Handler</a></h3>
-<p>When you stop an endpoint:</p>
+<p>The <code>#[handler]</code> macro generates the <code>handler_entry</code> symbol that the gateway looks for.</p>
+<h2 id="hot-swapping-with-graceful-draining"><a class="header" href="#hot-swapping-with-graceful-draining">Hot Swapping with Graceful Draining</a></h2>
+<p>Rust Edge Gateway supports zero-downtime updates with graceful draining:</p>
+<h3 id="how-it-works-1"><a class="header" href="#how-it-works-1">How It Works</a></h3>
 <ol>
-<li>Gateway closes the stdin pipe</li>
-<li>Worker's read_request() returns an error</li>
-<li>Worker exits cleanly</li>
-<li>Gateway waits for process exit</li>
-<li>Status changes to "Stopped"</li>
+<li><strong>Compile new version</strong> - New handler library is compiled</li>
+<li><strong>Load new handler</strong> - New library is loaded into memory</li>
+<li><strong>Atomic swap</strong> - New handler starts receiving new requests</li>
+<li><strong>Drain old handler</strong> - Old handler finishes in-flight requests</li>
+<li><strong>Unload old handler</strong> - Once drained, old library is unloaded</li>
 </ol>
-<h2 id="hot-reload"><a class="header" href="#hot-reload">Hot Reload</a></h2>
-<p>Rust Edge Gateway supports hot reloading:</p>
-<ol>
-<li><strong>Edit code</strong> in the admin UI</li>
-<li><strong>Compile</strong> the new version</li>
-<li><strong>Restart</strong> the endpoint
-<ul>
-<li>Old worker finishes current request</li>
-<li>New worker starts with updated code</li>
-</ul>
-</li>
-</ol>
-<p>No gateway restart required!</p>
+<h3 id="request-tracking"><a class="header" href="#request-tracking">Request Tracking</a></h3>
+<p>Each handler tracks active requests:</p>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│                    Handler Update Timeline                   │
+├─────────────────────────────────────────────────────────────┤
+│  Time ──────────────────────────────────────────────────▶   │
+│                                                              │
+│  Old Handler:  ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│                (handling)  (draining)  (unloaded)            │
+│                                                              │
+│  New Handler:  ░░░░░░░░░░░░████████████████████████████████  │
+│                            (handling new requests)           │
+│                                                              │
+│                     ▲                                        │
+│                     │ Swap point                             │
+└─────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3 id="drain-timeout"><a class="header" href="#drain-timeout">Drain Timeout</a></h3>
+<p>If the old handler doesn't drain within the timeout (default: 30 seconds), it is forcefully unloaded. Configure this based on your longest expected request duration.</p>
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
 <h3 id="compilation-errors-1"><a class="header" href="#compilation-errors-1">Compilation Errors</a></h3>
 <p>If compilation fails:</p>
 <ul>
 <li>Error message is captured and displayed</li>
 <li>Endpoint stays in previous state</li>
-<li>Previous binary (if any) remains available</li>
+<li>Previous library (if any) remains loaded</li>
 </ul>
 <h3 id="runtime-errors"><a class="header" href="#runtime-errors">Runtime Errors</a></h3>
 <p>If your handler panics:</p>
 <ul>
-<li>Gateway detects the worker exit</li>
+<li>The panic is caught by the gateway</li>
 <li>Error is logged</li>
-<li>Worker can be restarted</li>
-<li>Endpoint moves to "Error" state</li>
+<li>Other handlers continue working</li>
+<li>The specific request returns a 500 error</li>
 </ul>
 <h3 id="graceful-error-handling"><a class="header" href="#graceful-error-handling">Graceful Error Handling</a></h3>
 <p>Always handle errors in your code:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    match process_request(&amp;req) {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    match process_request(ctx, &amp;req).await {
         Ok(data) =&gt; Response::ok(data),
         Err(e) =&gt; e.to_response(), // HandlerError -&gt; Response
     }
 }
 
-fn process_request(req: &amp;Request) -&gt; Result&lt;JsonValue, HandlerError&gt; {
+async fn process_request(ctx: &amp;Context, req: &amp;Request) -&gt; Result&lt;JsonValue, HandlerError&gt; {
     let body: MyInput = req.json()
         .map_err(|e| HandlerError::ValidationError(e.to_string()))?;
-    
+
+    // Use services via ctx
     // ... process ...
-    
+
     Ok(json!({"result": "success"}))
 }
 <span class="boring">}</span></code></pre></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="handler-macros"><a class="header" href="#handler-macros">Handler Macros</a></h1>
-<p>The SDK provides several macros for running handler loops with different patterns.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="handler-attribute"><a class="header" href="#handler-attribute">Handler Attribute</a></h1>
+<p>The SDK provides the <code>#[handler]</code> attribute macro for creating handler entry points.</p>
 <h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Macro</th><th>Handler Signature</th><th>Use Case</th></tr></thead><tbody>
-<tr><td><code>handler_loop!</code></td><td><code>fn(Request) -&gt; Response</code></td><td>Simple sync handlers</td></tr>
-<tr><td><code>handler_loop_result!</code></td><td><code>fn(Request) -&gt; Result&lt;Response, HandlerError&gt;</code></td><td>Sync with error handling</td></tr>
-<tr><td><code>handler_loop_async!</code></td><td><code>async fn(Request) -&gt; Response</code></td><td>Async handlers</td></tr>
-<tr><td><code>handler_loop_async_result!</code></td><td><code>async fn(Request) -&gt; Result&lt;Response, HandlerError&gt;</code></td><td>Async with error handling</td></tr>
+<div class="table-wrapper"><table><thead><tr><th>Pattern</th><th>Handler Signature</th><th>Use Case</th></tr></thead><tbody>
+<tr><td>Basic</td><td><code>async fn(&amp;Context, Request) -&gt; Response</code></td><td>Standard handlers</td></tr>
+<tr><td>With Result</td><td><code>async fn(&amp;Context, Request) -&gt; Result&lt;Response, HandlerError&gt;</code></td><td>Error handling with <code>?</code></td></tr>
 </tbody></table>
 </div>
-<h2 id="sync-handlers"><a class="header" href="#sync-handlers">Sync Handlers</a></h2>
-<h3 id="handler_loop"><a class="header" href="#handler_loop"><code>handler_loop!</code></a></h3>
-<p>For simple synchronous handlers that return a <code>Response</code> directly.</p>
+<h2 id="the-handler-attribute-1"><a class="header" href="#the-handler-attribute-1">The Handler Attribute</a></h2>
+<p>The <code>#[handler]</code> attribute generates the dynamic library entry point:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     Response::ok(json!({"path": req.path, "method": req.method}))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
-<h3 id="handler_loop_result"><a class="header" href="#handler_loop_result"><code>handler_loop_result!</code></a></h3>
-<p>For handlers that return <code>Result&lt;Response, HandlerError&gt;</code>. Errors are automatically converted to HTTP responses.</p>
+<p>This generates a <code>handler_entry</code> symbol that the gateway loads and calls directly.</p>
+<h2 id="handler-signature"><a class="header" href="#handler-signature">Handler Signature</a></h2>
+<p>All handlers receive:</p>
+<ul>
+<li><code>ctx: &amp;Context</code> - Access to Service Actors (database, cache, storage)</li>
+<li><code>req: Request</code> - The incoming HTTP request</li>
+</ul>
+<p>And return:</p>
+<ul>
+<li><code>Response</code> - The HTTP response to send</li>
+</ul>
+<h3 id="basic-handler"><a class="header" href="#basic-handler">Basic Handler</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use rust_edge_gateway_sdk::prelude::*;
+
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    Response::ok(json!({
+        "message": "Hello!",
+        "path": req.path
+    }))
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="handler-with-error-handling"><a class="header" href="#handler-with-error-handling">Handler with Error Handling</a></h3>
+<p>For handlers that use the <code>?</code> operator, return <code>Result&lt;Response, HandlerError&gt;</code>:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
@@ -705,122 +757,255 @@ struct CreateItem {
     price: f64,
 }
 
-fn handle(req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
     // These all use ? operator - errors become HTTP responses
     let auth = req.require_header("Authorization")?;
     let item: CreateItem = req.json()?;
-    let id: i64 = req.require_path_param("id")?;
-    
+
     if item.price &lt; 0.0 {
         return Err(HandlerError::ValidationError("Price cannot be negative".into()));
     }
-    
-    Ok(Response::created(json!({"id": id, "item": item.name})))
-}
 
-handler_loop_result!(handle);
+    Ok(Response::created(json!({"name": item.name})))
+}
 <span class="boring">}</span></code></pre></pre>
-<h2 id="async-handlers"><a class="header" href="#async-handlers">Async Handlers</a></h2>
-<p>Async handlers require the <code>async</code> feature to be enabled.</p>
-<h3 id="cargotoml-1"><a class="header" href="#cargotoml-1">Cargo.toml</a></h3>
-<pre><code class="language-toml">[dependencies]
-rust-edge-gateway-sdk = { git = "https://github.com/user/rust-edge-gateway", features = ["async"] }
-tokio = { version = "1", features = ["full"] }
-</code></pre>
-<h3 id="handler_loop_async"><a class="header" href="#handler_loop_async"><code>handler_loop_async!</code></a></h3>
-<p>For async handlers that return a <code>Response</code> directly. A Tokio runtime is created automatically.</p>
+<h2 id="using-services-via-context"><a class="header" href="#using-services-via-context">Using Services via Context</a></h2>
+<p>The <code>Context</code> provides access to Service Actors:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-async fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    // Database operations
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users WHERE active = $1", &amp;[&amp;true]).await?;
+
+    // Cache operations
+    let cache = ctx.cache("redis").await?;
+    if let Some(cached) = cache.get("users:all").await? {
+        return Ok(Response::ok(cached));
+    }
+
+    // Storage operations
+    let storage = ctx.storage("s3").await?;
+    let file = storage.get("config.json").await?;
+
+    Ok(Response::ok(json!({"users": users})))
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="async-by-default"><a class="header" href="#async-by-default">Async by Default</a></h2>
+<p>All handlers are async - the gateway runs them on a Tokio runtime:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // You can use .await directly
     let data = fetch_from_api().await;
-    Response::ok(data)
-}
 
-handler_loop_async!(handle);
+    // Concurrent operations
+    let (users, products) = tokio::join!(
+        fetch_users(),
+        fetch_products()
+    );
+
+    Response::ok(json!({"users": users, "products": products}))
+}
 <span class="boring">}</span></code></pre></pre>
-<h3 id="handler_loop_async_result"><a class="header" href="#handler_loop_async_result"><code>handler_loop_async_result!</code></a></h3>
-<p>For async handlers with Result-based error handling. Combines async support with automatic error conversion.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use rust_edge_gateway_sdk::prelude::*;
-
-async fn handle(req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
-    let data: CreateItem = req.json()?;
-    
-    // Async database call
-    let id = database.insert(&amp;data).await
-        .map_err(|e| HandlerError::DatabaseError(e.to_string()))?;
-    
-    // Async file upload
-    let url = s3.upload(&amp;data.file).await
-        .map_err(|e| HandlerError::StorageError(e.to_string()))?;
-    
-    Ok(Response::created(json!({
-        "id": id,
-        "file_url": url
-    })))
-}
-
-handler_loop_async_result!(handle);
-<span class="boring">}</span></code></pre></pre>
-<h2 id="runtime-management"><a class="header" href="#runtime-management">Runtime Management</a></h2>
-<p><strong>Important:</strong> The async macros create a single Tokio runtime that persists across all requests. This is more efficient than creating a runtime per request.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// DON'T do this - creates runtime per request (inefficient):
-fn handle(req: Request) -&gt; Response {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        // async work
-    })
-}
-
-// DO this - runtime is created once by the macro:
-async fn handle(req: Request) -&gt; Response {
-    // async work directly
-}
-handler_loop_async!(handle);
-<span class="boring">}</span></code></pre></pre>
-<h2 id="choosing-the-right-macro"><a class="header" href="#choosing-the-right-macro">Choosing the Right Macro</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Your handler needs...</th><th>Use this macro</th></tr></thead><tbody>
-<tr><td>Simple sync logic</td><td><code>handler_loop!</code></td></tr>
-<tr><td>Sync with <code>?</code> operator</td><td><code>handler_loop_result!</code></td></tr>
-<tr><td>Async operations (DB, HTTP, files)</td><td><code>handler_loop_async!</code></td></tr>
-<tr><td>Async with <code>?</code> operator</td><td><code>handler_loop_async_result!</code></td></tr>
-</tbody></table>
-</div>
 <h2 id="example-complete-crud-handler"><a class="header" href="#example-complete-crud-handler">Example: Complete CRUD Handler</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-async fn handle(req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
     match (req.method.as_str(), req.path.as_str()) {
-        ("GET", "/items") =&gt; list_items().await,
-        ("POST", "/items") =&gt; create_item(&amp;req).await,
-        ("GET", _) if req.path.starts_with("/items/") =&gt; get_item(&amp;req).await,
-        ("DELETE", _) if req.path.starts_with("/items/") =&gt; delete_item(&amp;req).await,
+        ("GET", "/items") =&gt; list_items(ctx).await,
+        ("POST", "/items") =&gt; create_item(ctx, &amp;req).await,
+        ("GET", _) if req.path.starts_with("/items/") =&gt; get_item(ctx, &amp;req).await,
+        ("DELETE", _) if req.path.starts_with("/items/") =&gt; delete_item(ctx, &amp;req).await,
         _ =&gt; Err(HandlerError::MethodNotAllowed("Use GET, POST, or DELETE".into())),
     }
 }
 
-async fn list_items() -&gt; Result&lt;Response, HandlerError&gt; {
-    let items = db::get_all_items().await
-        .map_err(|e| HandlerError::DatabaseError(e.to_string()))?;
+async fn list_items(ctx: &amp;Context) -&gt; Result&lt;Response, HandlerError&gt; {
+    let db = ctx.database("main-db").await?;
+    let items = db.query("SELECT * FROM items", &amp;[]).await?;
     Ok(Response::ok(json!({"items": items})))
 }
 
-async fn create_item(req: &amp;Request) -&gt; Result&lt;Response, HandlerError&gt; {
+async fn create_item(ctx: &amp;Context, req: &amp;Request) -&gt; Result&lt;Response, HandlerError&gt; {
     let item: NewItem = req.json()?;
-    let id = db::insert_item(&amp;item).await
-        .map_err(|e| HandlerError::DatabaseError(e.to_string()))?;
+    let db = ctx.database("main-db").await?;
+    let id = db.execute("INSERT INTO items (name) VALUES ($1) RETURNING id", &amp;[&amp;item.name]).await?;
     Ok(Response::created(json!({"id": id})))
 }
 
-handler_loop_async_result!(handle);
+async fn get_item(ctx: &amp;Context, req: &amp;Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path.strip_prefix("/items/").unwrap_or("");
+    let db = ctx.database("main-db").await?;
+    let item = db.query_one("SELECT * FROM items WHERE id = $1", &amp;[&amp;id]).await?;
+    Ok(Response::ok(item))
+}
+
+async fn delete_item(ctx: &amp;Context, req: &amp;Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path.strip_prefix("/items/").unwrap_or("");
+    let db = ctx.database("main-db").await?;
+    db.execute("DELETE FROM items WHERE id = $1", &amp;[&amp;id]).await?;
+    Ok(Response::no_content())
+}
 <span class="boring">}</span></code></pre></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="context-api"><a class="header" href="#context-api">Context API</a></h1>
+<p>The <code>Context</code> provides access to Service Actors from within your handler. It's the bridge between your handler code and backend services like databases, caches, and storage.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
+<p>Every handler receives a <code>Context</code> reference:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // Use ctx to access services
+    let db = ctx.database("main-db").await?;
+    // ...
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="available-services"><a class="header" href="#available-services">Available Services</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Method</th><th>Returns</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>ctx.database(name)</code></td><td><code>DatabaseHandle</code></td><td>SQL database connection</td></tr>
+<tr><td><code>ctx.cache(name)</code></td><td><code>CacheHandle</code></td><td>Key-value cache (Redis)</td></tr>
+<tr><td><code>ctx.storage(name)</code></td><td><code>StorageHandle</code></td><td>Object storage (S3/MinIO)</td></tr>
+</tbody></table>
+</div>
+<h2 id="database-access"><a class="header" href="#database-access">Database Access</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let db = ctx.database("main-db").await?;
+    
+    // Query with parameters
+    let users = db.query(
+        "SELECT id, name, email FROM users WHERE active = $1",
+        &amp;[&amp;true]
+    ).await?;
+    
+    // Execute (INSERT, UPDATE, DELETE)
+    let affected = db.execute(
+        "UPDATE users SET last_login = NOW() WHERE id = $1",
+        &amp;[&amp;user_id]
+    ).await?;
+    
+    // Query single row
+    let user = db.query_one(
+        "SELECT * FROM users WHERE id = $1",
+        &amp;[&amp;user_id]
+    ).await?;
+    
+    Ok(Response::ok(json!({"users": users})))
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="cache-access"><a class="header" href="#cache-access">Cache Access</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let cache = ctx.cache("redis").await?;
+    
+    // Try cache first
+    if let Some(cached) = cache.get("users:all").await? {
+        return Ok(Response::ok(cached));
+    }
+    
+    // Cache miss - fetch from database
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users", &amp;[]).await?;
+    
+    // Store in cache with TTL (seconds)
+    cache.set("users:all", &amp;users, 300).await?;
+    
+    Ok(Response::ok(json!({"users": users})))
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="cache-operations"><a class="header" href="#cache-operations">Cache Operations</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Method</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>get(key)</code></td><td>Get value by key</td></tr>
+<tr><td><code>set(key, value, ttl)</code></td><td>Set value with TTL in seconds</td></tr>
+<tr><td><code>delete(key)</code></td><td>Delete a key</td></tr>
+<tr><td><code>exists(key)</code></td><td>Check if key exists</td></tr>
+<tr><td><code>incr(key)</code></td><td>Increment numeric value</td></tr>
+<tr><td><code>decr(key)</code></td><td>Decrement numeric value</td></tr>
+</tbody></table>
+</div>
+<h2 id="storage-access"><a class="header" href="#storage-access">Storage Access</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let storage = ctx.storage("s3").await?;
+    
+    // Upload file
+    let data = req.body_bytes();
+    storage.put("uploads/file.txt", data).await?;
+    
+    // Download file
+    let content = storage.get("config/settings.json").await?;
+    
+    // List files
+    let files = storage.list("uploads/").await?;
+    
+    // Delete file
+    storage.delete("uploads/old-file.txt").await?;
+    
+    // Get signed URL (for direct client access)
+    let url = storage.presigned_url("uploads/file.txt", 3600).await?;
+    
+    Ok(Response::ok(json!({"url": url})))
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="service-configuration"><a class="header" href="#service-configuration">Service Configuration</a></h2>
+<p>Services are configured in the Admin UI or via the Management API. Each service has a unique name that you use to access it:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// These names come from your service configuration
+let main_db = ctx.database("main-db").await?;
+let read_replica = ctx.database("read-replica").await?;
+let session_cache = ctx.cache("sessions").await?;
+let file_storage = ctx.storage("uploads").await?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h2>
+<p>Service operations return <code>Result</code> types that can be used with <code>?</code>:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    // Service errors are automatically converted to HandlerError
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users", &amp;[]).await?;
+    
+    Ok(Response::ok(json!({"users": users})))
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Common error types:</p>
+<ul>
+<li><code>ServiceNotFound</code> - The named service doesn't exist</li>
+<li><code>ConnectionError</code> - Failed to connect to the service</li>
+<li><code>QueryError</code> - Database query failed</li>
+<li><code>StorageError</code> - Storage operation failed</li>
+</ul>
+<h2 id="actor-based-architecture"><a class="header" href="#actor-based-architecture">Actor-Based Architecture</a></h2>
+<p>Under the hood, services use an actor-based architecture:</p>
+<ol>
+<li><strong>Service Actors</strong> run as background tasks</li>
+<li><strong>Handlers send messages</strong> to actors via channels</li>
+<li><strong>Actors process requests</strong> and send responses back</li>
+<li><strong>Connection pooling</strong> is handled automatically</li>
+</ol>
+<p>This provides:</p>
+<ul>
+<li><strong>Isolation</strong> - Service failures don't crash handlers</li>
+<li><strong>Concurrency</strong> - Multiple handlers can share services safely</li>
+<li><strong>Efficiency</strong> - Connection pools are reused across requests</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="request"><a class="header" href="#request">Request</a></h1>
 <p>The <code>Request</code> struct represents an incoming HTTP request.</p>
 <h2 id="definition"><a class="header" href="#definition">Definition</a></h2>
@@ -1327,7 +1512,7 @@ Response::new(200)
 }
 
 <span class="boring">}</span></code></pre></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="error-handling-1"><a class="header" href="#error-handling-1">Error Handling</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h1>
 <p>The SDK provides a <code>HandlerError</code> enum for structured error handling with automatic HTTP status code mapping.</p>
 <h2 id="quick-reference-2"><a class="header" href="#quick-reference-2">Quick Reference</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Variant</th><th>Status</th><th>Use Case</th></tr></thead><tbody>
@@ -1546,18 +1731,22 @@ handler_loop_async_result!(handle);
 <li><strong>Include context</strong> - Error messages should help debugging</li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="services"><a class="header" href="#services">Services</a></h1>
-<p>Rust Edge Gateway can connect your handlers to backend services like databases, Redis, and object storage.</p>
-<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
-<p>Services are configured in the gateway admin UI and made available to handlers. Your handler code uses typed service handles to interact with backends.</p>
+<p>Rust Edge Gateway connects your handlers to backend services via Service Actors. Services are accessed through the Context API using an actor-based message-passing architecture.</p>
+<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<p>Services are:</p>
+<ol>
+<li><strong>Configured</strong> in the Admin UI or via API</li>
+<li><strong>Started as actors</strong> when the gateway launches</li>
+<li><strong>Accessed via Context</strong> in your handler code</li>
+<li><strong>Thread-safe</strong> through message-passing</li>
+</ol>
 <h2 id="available-service-types"><a class="header" href="#available-service-types">Available Service Types</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Service</th><th>Description</th><th>Use Cases</th></tr></thead><tbody>
-<tr><td><strong>SQLite</strong></td><td>Embedded SQL database</td><td>Local data, caching, simple apps</td></tr>
 <tr><td><strong>PostgreSQL</strong></td><td>Advanced relational database</td><td>Complex queries, transactions</td></tr>
 <tr><td><strong>MySQL</strong></td><td>Popular relational database</td><td>Web applications, compatibility</td></tr>
+<tr><td><strong>SQLite</strong></td><td>Embedded SQL database</td><td>Local data, caching, simple apps</td></tr>
 <tr><td><strong>Redis</strong></td><td>In-memory data store</td><td>Caching, sessions, pub/sub</td></tr>
-<tr><td><strong>MongoDB</strong></td><td>Document database</td><td>Flexible schemas, JSON data</td></tr>
-<tr><td><strong>MinIO</strong></td><td>S3-compatible object storage</td><td>File uploads, media storage</td></tr>
-<tr><td><strong>Memcached</strong></td><td>Distributed caching</td><td>High-speed key-value caching</td></tr>
+<tr><td><strong>MinIO/S3</strong></td><td>Object storage</td><td>File uploads, media storage</td></tr>
 <tr><td><strong>FTP/SFTP</strong></td><td>File transfer protocols</td><td>File uploads, vendor integrations</td></tr>
 <tr><td><strong>Email</strong></td><td>SMTP email sending</td><td>Notifications, alerts, reports</td></tr>
 </tbody></table>
@@ -1569,120 +1758,124 @@ handler_loop_async_result!(handle);
 <li>Click <strong>Create Service</strong></li>
 <li>Select service type and configure connection</li>
 <li>Test the connection</li>
-<li>Bind to endpoints</li>
+<li>Save the service</li>
 </ol>
 <h3 id="via-api"><a class="header" href="#via-api">Via API</a></h3>
 <pre><code class="language-bash">curl -X POST http://localhost:9081/api/services \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Main Database",
+    "name": "main-db",
     "service_type": "postgres",
     "config": {
       "host": "db.example.com",
       "port": 5432,
       "database": "myapp",
       "username": "app_user",
-      "password": "secret"
+      "password": "secret",
+      "pool_size": 10
     }
   }'
 </code></pre>
 <h2 id="using-services-in-handlers"><a class="header" href="#using-services-in-handlers">Using Services in Handlers</a></h2>
-<p>Services are accessed through typed handles in your handler code.</p>
+<p>Services are accessed through the Context:</p>
 <h3 id="database-example"><a class="header" href="#database-example">Database Example</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
-    let db = DbPool { pool_id: "main-db".to_string() };
-    
-    // Query
-    let result = db.query(
-        "SELECT id, name FROM users WHERE active = ?",
-        &amp;["true"]
-    );
-    
-    match result {
-        Ok(data) =&gt; Response::ok(json!({"users": data.rows})),
-        Err(e) =&gt; Response::internal_error(e.to_string()),
-    }
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let db = ctx.database("main-db").await?;
+
+    // Query with parameters
+    let users = db.query(
+        "SELECT id, name FROM users WHERE active = $1",
+        &amp;[&amp;true]
+    ).await?;
+
+    Ok(Response::ok(json!({"users": users})))
 }
 <span class="boring">}</span></code></pre></pre>
-<h3 id="redis-example"><a class="header" href="#redis-example">Redis Example</a></h3>
+<h3 id="cache-example"><a class="header" href="#cache-example">Cache Example</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
-    let redis = RedisPool { pool_id: "cache".to_string() };
-    
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let cache = ctx.cache("redis").await?;
+
     // Try cache first
-    if let Ok(Some(cached)) = redis.get("user:123") {
-        return Response::ok(json!({"source": "cache", "data": cached}));
+    if let Some(cached) = cache.get("user:123").await? {
+        return Ok(Response::ok(json!({"source": "cache", "data": cached})));
     }
-    
-    // Cache miss - fetch and store
-    let data = fetch_from_db();
-    let _ = redis.setex("user:123", &amp;data, 300); // Cache for 5 minutes
-    
-    Response::ok(json!({"source": "db", "data": data}))
+
+    // Cache miss - fetch from database
+    let db = ctx.database("main-db").await?;
+    let user = db.query_one("SELECT * FROM users WHERE id = $1", &amp;[&amp;123]).await?;
+
+    // Store in cache (TTL in seconds)
+    cache.set("user:123", &amp;user, 300).await?;
+
+    Ok(Response::ok(json!({"source": "db", "data": user})))
 }
 <span class="boring">}</span></code></pre></pre>
-<h2 id="service-handles"><a class="header" href="#service-handles">Service Handles</a></h2>
-<h3 id="dbpool"><a class="header" href="#dbpool">DbPool</a></h3>
-<p>For SQL databases (PostgreSQL, MySQL, SQLite):</p>
+<h3 id="storage-example"><a class="header" href="#storage-example">Storage Example</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub struct DbPool {
-    pub pool_id: String,
-}
+</span>use rust_edge_gateway_sdk::prelude::*;
 
-impl DbPool {
-    /// Execute a query, returns rows
-    fn query(&amp;self, sql: &amp;str, params: &amp;[&amp;str]) -&gt; Result&lt;DbResult, HandlerError&gt;;
-    
-    /// Execute a statement (INSERT, UPDATE, DELETE)
-    fn execute(&amp;self, sql: &amp;str, params: &amp;[&amp;str]) -&gt; Result&lt;u64, HandlerError&gt;;
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let storage = ctx.storage("s3").await?;
+
+    // Upload file
+    let data = req.body_bytes();
+    storage.put("uploads/file.txt", data).await?;
+
+    // Get presigned URL for client download
+    let url = storage.presigned_url("uploads/file.txt", 3600).await?;
+
+    Ok(Response::ok(json!({"download_url": url})))
 }
 <span class="boring">}</span></code></pre></pre>
-<h3 id="redispool"><a class="header" href="#redispool">RedisPool</a></h3>
-<p>For Redis:</p>
+<h2 id="actor-based-architecture-1"><a class="header" href="#actor-based-architecture-1">Actor-Based Architecture</a></h2>
+<p>Services use the actor pattern for thread-safety:</p>
+<pre><code>┌──────────┐     ┌─────────────┐     ┌──────────────┐
+│ Handler  │────▶│   Channel   │────▶│ Service Actor│
+│          │     │  (command)  │     │              │
+│          │◀────│  (response) │◀────│  (owns pool) │
+└──────────┘     └─────────────┘     └──────────────┘
+</code></pre>
+<p>Benefits:</p>
+<ul>
+<li><strong>Thread-safe</strong> - No shared mutable state</li>
+<li><strong>Isolated</strong> - Actor failures don't crash handlers</li>
+<li><strong>Efficient</strong> - Connection pools are reused</li>
+<li><strong>Backpressure</strong> - Channel buffers prevent overload</li>
+</ul>
+<h2 id="service-names"><a class="header" href="#service-names">Service Names</a></h2>
+<p>Services are identified by name in your handler code:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>pub struct RedisPool {
-    pub pool_id: String,
-}
-
-impl RedisPool {
-    /// Get a value
-    fn get(&amp;self, key: &amp;str) -&gt; Result&lt;Option&lt;String&gt;, HandlerError&gt;;
-    
-    /// Set a value
-    fn set(&amp;self, key: &amp;str, value: &amp;str) -&gt; Result&lt;(), HandlerError&gt;;
-    
-    /// Set with expiration (seconds)
-    fn setex(&amp;self, key: &amp;str, value: &amp;str, seconds: u64) -&gt; Result&lt;(), HandlerError&gt;;
-}
+</span>// These names come from your service configuration
+let main_db = ctx.database("main-db").await?;
+let read_replica = ctx.database("read-replica").await?;
+let session_cache = ctx.cache("sessions").await?;
+let file_storage = ctx.storage("uploads").await?;
 <span class="boring">}</span></code></pre></pre>
-<h2 id="binding-services-to-endpoints"><a class="header" href="#binding-services-to-endpoints">Binding Services to Endpoints</a></h2>
-<p>Services must be bound to endpoints before they can be used:</p>
-<ol>
-<li>Create the service in the admin UI</li>
-<li>Open the endpoint configuration</li>
-<li>Add the service binding with a pool ID</li>
-<li>The pool ID is used in your handler code</li>
-</ol>
-<p>This allows the same endpoint code to use different service instances in different environments (dev, staging, prod).</p>
+<p>This allows the same handler code to use different service instances in different environments.</p>
 <h2 id="next-steps-1"><a class="header" href="#next-steps-1">Next Steps</a></h2>
 <ul>
+<li><a href="sdk/./context.html">Context API</a> - Full Context reference</li>
 <li><a href="sdk/./services/database.html">Database Service Details</a></li>
-<li><a href="sdk/./services/redis.html">Redis Service Details</a></li>
-<li><a href="sdk/./services/ftp.html">FTP/SFTP Service Details</a></li>
-<li><a href="sdk/./services/email.html">Email Service Details</a></li>
+<li><a href="sdk/./services/redis.html">Cache (Redis) Details</a></li>
+<li><a href="sdk/./services/storage.html">Storage Details</a></li>
+<li><a href="sdk/../architecture/service-actors.html">Architecture: Service Actors</a></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="storage-abstraction"><a class="header" href="#storage-abstraction">Storage Abstraction</a></h1>
 <p>A unified interface for storing data across different backends.</p>
-<h2 id="overview-1"><a class="header" href="#overview-1">Overview</a></h2>
+<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
 <p>The <code>Storage</code> type provides a single API that works with:</p>
 <ul>
 <li><strong>Database backends</strong> - SQLite, PostgreSQL, MySQL</li>
@@ -1969,7 +2162,7 @@ fn get_user(db: &amp;DbPool, id: &amp;str) -&gt; Result&lt;Option&lt;User&gt;, H
     }
 }
 <span class="boring">}</span></code></pre></pre>
-<h2 id="error-handling-2"><a class="header" href="#error-handling-2">Error Handling</a></h2>
+<h2 id="error-handling-3"><a class="header" href="#error-handling-3">Error Handling</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>fn handle(req: Request) -&gt; Response {
@@ -2164,7 +2357,7 @@ fn handle(req: Request) -&gt; Response {
     }
 }
 <span class="boring">}</span></code></pre></pre>
-<h2 id="error-handling-3"><a class="header" href="#error-handling-3">Error Handling</a></h2>
+<h2 id="error-handling-4"><a class="header" href="#error-handling-4">Error Handling</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>match redis.get("key") {
@@ -2465,6 +2658,597 @@ fn handle(req: Request) -&gt; Response {
 <li><strong>Use templates</strong> - Consistent formatting</li>
 <li><strong>Test with sandbox</strong> - Use test mode before production</li>
 </ol>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture Overview</a></h1>
+<p>Rust Edge Gateway uses a dynamic library loading architecture with actor-based services for high performance and zero-downtime deployments.</p>
+<h2 id="high-level-architecture"><a class="header" href="#high-level-architecture">High-Level Architecture</a></h2>
+<pre><code>┌─────────────────────────────────────────────────────────────────┐
+│                        Edge Gateway                              │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
+│  │   Router    │  │   Admin     │  │    Handler Registry     │  │
+│  │  (Axum)     │  │   API       │  │  (Dynamic Libraries)    │  │
+│  └──────┬──────┘  └─────────────┘  └───────────┬─────────────┘  │
+│         │                                       │                │
+│         │         ┌─────────────────────────────┘                │
+│         │         │                                              │
+│         ▼         ▼                                              │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                    Service Actors                            ││
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    ││
+│  │  │ Database │  │  Cache   │  │ Storage  │  │  Email   │    ││
+│  │  │  Actor   │  │  Actor   │  │  Actor   │  │  Actor   │    ││
+│  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘    ││
+│  └─────────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="core-components"><a class="header" href="#core-components">Core Components</a></h2>
+<h3 id="router-axum"><a class="header" href="#router-axum">Router (Axum)</a></h3>
+<p>The main HTTP server built on Axum:</p>
+<ul>
+<li>Receives incoming HTTP requests</li>
+<li>Matches requests to endpoints by path, method, and domain</li>
+<li>Dispatches to the appropriate handler</li>
+<li>Returns responses to clients</li>
+</ul>
+<h3 id="handler-registry"><a class="header" href="#handler-registry">Handler Registry</a></h3>
+<p>Manages loaded handler libraries:</p>
+<ul>
+<li>Loads dynamic libraries (<code>.so</code>, <code>.dll</code>, <code>.dylib</code>)</li>
+<li>Maintains a map of endpoint ID to handler function</li>
+<li>Supports hot-swapping with graceful draining</li>
+<li>Tracks active requests per handler</li>
+</ul>
+<h3 id="service-actors"><a class="header" href="#service-actors">Service Actors</a></h3>
+<p>Background tasks that manage backend connections:</p>
+<ul>
+<li><strong>Database Actor</strong> - Connection pooling for SQL databases</li>
+<li><strong>Cache Actor</strong> - Redis/Memcached connections</li>
+<li><strong>Storage Actor</strong> - S3/MinIO object storage</li>
+<li><strong>Email Actor</strong> - SMTP connections</li>
+</ul>
+<p>Actors communicate via message-passing channels, providing isolation and thread-safety.</p>
+<h3 id="admin-api"><a class="header" href="#admin-api">Admin API</a></h3>
+<p>RESTful API for management:</p>
+<ul>
+<li>Create/update/delete endpoints</li>
+<li>Compile handler code</li>
+<li>Deploy/undeploy handlers</li>
+<li>Configure services</li>
+<li>View logs and metrics</li>
+</ul>
+<h2 id="request-flow-1"><a class="header" href="#request-flow-1">Request Flow</a></h2>
+<ol>
+<li><strong>Request arrives</strong> at the Axum router</li>
+<li><strong>Router matches</strong> the request to an endpoint</li>
+<li><strong>Handler Registry</strong> looks up the handler by endpoint ID</li>
+<li><strong>Request guard</strong> is acquired (for draining support)</li>
+<li><strong>Handler function</strong> is called with Context and Request</li>
+<li><strong>Handler accesses services</strong> via Context (sends messages to actors)</li>
+<li><strong>Response is returned</strong> to the router</li>
+<li><strong>Request guard</strong> is dropped (decrements active count)</li>
+<li><strong>Router sends</strong> response to client</li>
+</ol>
+<h2 id="handler-compilation"><a class="header" href="#handler-compilation">Handler Compilation</a></h2>
+<p>When you compile a handler:</p>
+<ol>
+<li><strong>Code is written</strong> to <code>handlers/{id}/src/lib.rs</code></li>
+<li><strong>Cargo.toml</strong> is generated with SDK dependency</li>
+<li><strong><code>cargo build --release</code></strong> compiles to dynamic library</li>
+<li><strong>Library is stored</strong> in <code>handlers/{id}/target/release/</code></li>
+</ol>
+<p>The generated library exports a <code>handler_entry</code> symbol that the registry loads.</p>
+<h2 id="hot-swapping"><a class="header" href="#hot-swapping">Hot Swapping</a></h2>
+<p>When you update a handler:</p>
+<ol>
+<li><strong>New library is compiled</strong></li>
+<li><strong>New library is loaded</strong> into memory</li>
+<li><strong>Registry atomically swaps</strong> the handler pointer</li>
+<li><strong>Old handler starts draining</strong> (no new requests)</li>
+<li><strong>Active requests complete</strong> on old handler</li>
+<li><strong>Old library is unloaded</strong> when drained</li>
+</ol>
+<p>This provides zero-downtime deployments.</p>
+<h2 id="service-actor-pattern"><a class="header" href="#service-actor-pattern">Service Actor Pattern</a></h2>
+<p>Services use the actor pattern for safety and efficiency:</p>
+<pre><code>┌──────────┐     ┌─────────────┐     ┌──────────────┐
+│ Handler  │────▶│   Channel   │────▶│ Service Actor│
+│          │     │  (mpsc)     │     │              │
+│          │◀────│             │◀────│  (owns pool) │
+└──────────┘     └─────────────┘     └──────────────┘
+</code></pre>
+<p>Benefits:</p>
+<ul>
+<li><strong>Thread-safe</strong> - No shared mutable state</li>
+<li><strong>Isolated</strong> - Actor failures don't crash handlers</li>
+<li><strong>Efficient</strong> - Connection pools are reused</li>
+<li><strong>Backpressure</strong> - Channel buffers prevent overload</li>
+</ul>
+<h2 id="comparison-with-v1"><a class="header" href="#comparison-with-v1">Comparison with v1</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature</th><th>v1 (Subprocess)</th><th>v2 (Dynamic Library)</th></tr></thead><tbody>
+<tr><td>Execution</td><td>Child process</td><td>Direct function call</td></tr>
+<tr><td>IPC</td><td>stdin/stdout JSON</td><td>None (in-process)</td></tr>
+<tr><td>Latency</td><td>~1-5ms overhead</td><td>~0.01ms overhead</td></tr>
+<tr><td>Memory</td><td>Separate per handler</td><td>Shared with gateway</td></tr>
+<tr><td>Hot Swap</td><td>Restart process</td><td>Atomic pointer swap</td></tr>
+<tr><td>Draining</td><td>Kill process</td><td>Graceful completion</td></tr>
+</tbody></table>
+</div><div style="break-before: page; page-break-before: always;"></div><h1 id="handler-registry-1"><a class="header" href="#handler-registry-1">Handler Registry</a></h1>
+<p>The Handler Registry manages loaded handler libraries and provides hot-swapping with graceful draining.</p>
+<h2 id="overview-3"><a class="header" href="#overview-3">Overview</a></h2>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct HandlerRegistry {
+    /// Map of endpoint ID to loaded handler
+    handlers: RwLock&lt;HashMap&lt;String, Arc&lt;LoadedHandler&gt;&gt;&gt;,
+    
+    /// Handlers that are draining (previous versions)
+    draining_handlers: RwLock&lt;Vec&lt;Arc&lt;LoadedHandler&gt;&gt;&gt;,
+    
+    /// Directory where handler libraries are stored
+    handlers_dir: PathBuf,
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="loading-handlers"><a class="header" href="#loading-handlers">Loading Handlers</a></h2>
+<p>When a handler is deployed, the registry:</p>
+<ol>
+<li><strong>Locates the library</strong> in the handlers directory</li>
+<li><strong>Loads it with <code>libloading</code></strong> (cross-platform dynamic loading)</li>
+<li><strong>Finds the <code>handler_entry</code> symbol</strong> (function pointer)</li>
+<li><strong>Stores in the handlers map</strong> by endpoint ID</li>
+</ol>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Load a handler
+registry.load("my-endpoint").await?;
+
+// Load from specific path
+registry.load_from("my-endpoint", Path::new("/path/to/lib.so")).await?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="executing-handlers"><a class="header" href="#executing-handlers">Executing Handlers</a></h2>
+<p>The registry provides execution methods with request tracking:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Execute a handler
+let response = registry.execute("my-endpoint", &amp;ctx, request).await?;
+
+// Execute with timeout
+let response = registry.execute_with_timeout(
+    "my-endpoint",
+    &amp;ctx,
+    request,
+    Duration::from_secs(30)
+).await?;
+<span class="boring">}</span></code></pre></pre>
+<p>Request tracking ensures graceful draining works correctly.</p>
+<h2 id="hot-swapping-1"><a class="header" href="#hot-swapping-1">Hot Swapping</a></h2>
+<h3 id="immediate-swap"><a class="header" href="#immediate-swap">Immediate Swap</a></h3>
+<p>For quick updates where in-flight requests can be dropped:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>registry.swap("my-endpoint", Path::new("/path/to/new-lib.so")).await?;
+<span class="boring">}</span></code></pre></pre>
+<p>The old handler is dropped immediately.</p>
+<h3 id="graceful-swap"><a class="header" href="#graceful-swap">Graceful Swap</a></h3>
+<p>For zero-downtime updates:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let result = registry.swap_graceful(
+    "my-endpoint",
+    Path::new("/path/to/new-lib.so"),
+    Duration::from_secs(30)  // drain timeout
+).await?;
+
+println!("Swapped: {}", result.swapped);
+println!("Pending requests: {}", result.old_requests_pending);
+println!("Draining: {}", result.draining);
+<span class="boring">}</span></code></pre></pre>
+<p>The graceful swap:</p>
+<ol>
+<li>Loads the new handler</li>
+<li>Atomically swaps the active handler</li>
+<li>Marks the old handler as draining</li>
+<li>Waits for in-flight requests to complete</li>
+<li>Unloads the old handler when drained</li>
+</ol>
+<h2 id="request-tracking-1"><a class="header" href="#request-tracking-1">Request Tracking</a></h2>
+<p>Each <code>LoadedHandler</code> tracks active requests:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct LoadedHandler {
+    // ... library and entry point ...
+    
+    /// Active request count
+    active_requests: AtomicU64,
+    
+    /// Whether this handler is draining
+    draining: AtomicBool,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>When executing a handler:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Acquire request guard (increments counter)
+let guard = handler.acquire_request()?;
+
+// Execute handler
+let response = handler.execute(&amp;ctx, request).await;
+
+// Guard is dropped (decrements counter)
+drop(guard);
+<span class="boring">}</span></code></pre></pre>
+<p>If the handler is draining, <code>acquire_request()</code> returns <code>None</code>.</p>
+<h2 id="draining-states"><a class="header" href="#draining-states">Draining States</a></h2>
+<p>A handler can be in one of these states:</p>
+<div class="table-wrapper"><table><thead><tr><th>State</th><th><code>draining</code></th><th><code>active_requests</code></th><th>Description</th></tr></thead><tbody>
+<tr><td>Active</td><td><code>false</code></td><td>Any</td><td>Accepting new requests</td></tr>
+<tr><td>Draining</td><td><code>true</code></td><td>&gt; 0</td><td>Finishing in-flight requests</td></tr>
+<tr><td>Drained</td><td><code>true</code></td><td>0</td><td>Ready to unload</td></tr>
+</tbody></table>
+</div>
+<h2 id="monitoring"><a class="header" href="#monitoring">Monitoring</a></h2>
+<p>Get statistics about loaded handlers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let stats = registry.stats().await;
+
+println!("Loaded handlers: {}", stats.loaded_count);
+println!("Draining handlers: {}", stats.draining_count);
+println!("Active requests: {}", stats.active_requests);
+println!("Draining requests: {}", stats.draining_requests);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="cleanup"><a class="header" href="#cleanup">Cleanup</a></h2>
+<p>Periodically clean up fully drained handlers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let removed = registry.cleanup_drained().await;
+println!("Cleaned up {} drained handlers", removed);
+<span class="boring">}</span></code></pre></pre>
+<p>This is typically called by a background task.</p>
+<h2 id="library-naming"><a class="header" href="#library-naming">Library Naming</a></h2>
+<p>Libraries are named by platform:</p>
+<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Library Name</th></tr></thead><tbody>
+<tr><td>Linux</td><td><code>libhandler_{id}.so</code></td></tr>
+<tr><td>Windows</td><td><code>handler_{id}.dll</code></td></tr>
+<tr><td>macOS</td><td><code>libhandler_{id}.dylib</code></td></tr>
+</tbody></table>
+</div>
+<p>The registry handles this automatically based on the target platform.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="service-actors-1"><a class="header" href="#service-actors-1">Service Actors</a></h1>
+<p>Service Actors provide thread-safe access to backend services using the actor pattern.</p>
+<h2 id="actor-pattern"><a class="header" href="#actor-pattern">Actor Pattern</a></h2>
+<p>Each service runs as an independent actor:</p>
+<pre><code>┌──────────────────────────────────────────────────────────────┐
+│                      Service Actor                            │
+├──────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────┐    │
+│  │   Inbox     │────▶│   Actor     │────▶│  Backend    │    │
+│  │  (Channel)  │     │   Loop      │     │  (Pool)     │    │
+│  └─────────────┘     └─────────────┘     └─────────────┘    │
+│         ▲                   │                                │
+│         │                   ▼                                │
+│  ┌─────────────┐     ┌─────────────┐                        │
+│  │  Handlers   │◀────│  Response   │                        │
+│  │  (Callers)  │     │  Channel    │                        │
+│  └─────────────┘     └─────────────┘                        │
+└──────────────────────────────────────────────────────────────┘
+</code></pre>
+<h2 id="how-it-works-2"><a class="header" href="#how-it-works-2">How It Works</a></h2>
+<ol>
+<li><strong>Handler sends a command</strong> to the actor's inbox channel</li>
+<li><strong>Actor receives the command</strong> in its event loop</li>
+<li><strong>Actor executes the operation</strong> using its connection pool</li>
+<li><strong>Actor sends the result</strong> back via a oneshot channel</li>
+<li><strong>Handler receives the result</strong> and continues</li>
+</ol>
+<h2 id="actor-types"><a class="header" href="#actor-types">Actor Types</a></h2>
+<h3 id="database-actor"><a class="header" href="#database-actor">Database Actor</a></h3>
+<p>Manages SQL database connections:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum DatabaseCommand {
+    Query {
+        sql: String,
+        params: Vec&lt;Value&gt;,
+        reply: oneshot::Sender&lt;Result&lt;Vec&lt;Row&gt;&gt;&gt;,
+    },
+    Execute {
+        sql: String,
+        params: Vec&lt;Value&gt;,
+        reply: oneshot::Sender&lt;Result&lt;u64&gt;&gt;,
+    },
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="cache-actor"><a class="header" href="#cache-actor">Cache Actor</a></h3>
+<p>Manages Redis/Memcached connections:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum CacheCommand {
+    Get {
+        key: String,
+        reply: oneshot::Sender&lt;Result&lt;Option&lt;String&gt;&gt;&gt;,
+    },
+    Set {
+        key: String,
+        value: String,
+        ttl: Option&lt;u64&gt;,
+        reply: oneshot::Sender&lt;Result&lt;()&gt;&gt;,
+    },
+    Delete {
+        key: String,
+        reply: oneshot::Sender&lt;Result&lt;bool&gt;&gt;,
+    },
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="storage-actor"><a class="header" href="#storage-actor">Storage Actor</a></h3>
+<p>Manages object storage (S3/MinIO):</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub enum StorageCommand {
+    Get {
+        key: String,
+        reply: oneshot::Sender&lt;Result&lt;Vec&lt;u8&gt;&gt;&gt;,
+    },
+    Put {
+        key: String,
+        data: Vec&lt;u8&gt;,
+        reply: oneshot::Sender&lt;Result&lt;()&gt;&gt;,
+    },
+    Delete {
+        key: String,
+        reply: oneshot::Sender&lt;Result&lt;()&gt;&gt;,
+    },
+    List {
+        prefix: String,
+        reply: oneshot::Sender&lt;Result&lt;Vec&lt;String&gt;&gt;&gt;,
+    },
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="actor-handle"><a class="header" href="#actor-handle">Actor Handle</a></h2>
+<p>Handlers interact with actors through handles:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct ActorHandle&lt;C&gt; {
+    sender: mpsc::Sender&lt;C&gt;,
+}
+
+impl&lt;C&gt; ActorHandle&lt;C&gt; {
+    pub async fn send(&amp;self, command: C) -&gt; Result&lt;()&gt; {
+        self.sender.send(command).await?;
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="benefits"><a class="header" href="#benefits">Benefits</a></h2>
+<h3 id="thread-safety"><a class="header" href="#thread-safety">Thread Safety</a></h3>
+<p>Actors own their resources exclusively:</p>
+<ul>
+<li>No shared mutable state</li>
+<li>No locks needed</li>
+<li>No data races possible</li>
+</ul>
+<h3 id="isolation"><a class="header" href="#isolation">Isolation</a></h3>
+<p>Actor failures are contained:</p>
+<ul>
+<li>A crashed actor doesn't crash handlers</li>
+<li>Actors can be restarted independently</li>
+<li>Errors are returned as <code>Result</code> values</li>
+</ul>
+<h3 id="backpressure"><a class="header" href="#backpressure">Backpressure</a></h3>
+<p>Channel buffers provide natural backpressure:</p>
+<ul>
+<li>If an actor is overloaded, senders wait</li>
+<li>Prevents resource exhaustion</li>
+<li>Configurable buffer sizes</li>
+</ul>
+<h3 id="connection-pooling"><a class="header" href="#connection-pooling">Connection Pooling</a></h3>
+<p>Actors manage connection pools:</p>
+<ul>
+<li>Connections are reused across requests</li>
+<li>Pool size is configurable</li>
+<li>Automatic reconnection on failure</li>
+</ul>
+<h2 id="configuration-4"><a class="header" href="#configuration-4">Configuration</a></h2>
+<p>Actors are configured via the Admin UI or API:</p>
+<pre><code class="language-json">{
+  "name": "main-db",
+  "type": "postgres",
+  "config": {
+    "host": "db.example.com",
+    "port": 5432,
+    "database": "myapp",
+    "username": "app",
+    "password": "secret",
+    "pool_size": 10
+  }
+}
+</code></pre>
+<h2 id="lifecycle"><a class="header" href="#lifecycle">Lifecycle</a></h2>
+<ol>
+<li><strong>Gateway starts</strong> - Service actors are spawned</li>
+<li><strong>Handlers execute</strong> - Send commands to actors</li>
+<li><strong>Actors process</strong> - Execute operations, return results</li>
+<li><strong>Gateway stops</strong> - Actors are gracefully shut down</li>
+</ol>
+<p>Actors run for the lifetime of the gateway and are shared across all handlers.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="graceful-draining"><a class="header" href="#graceful-draining">Graceful Draining</a></h1>
+<p>Graceful draining enables zero-downtime deployments by allowing old handlers to complete in-flight requests while new handlers receive new requests.</p>
+<h2 id="the-problem"><a class="header" href="#the-problem">The Problem</a></h2>
+<p>Without graceful draining, updating a handler can cause:</p>
+<ul>
+<li><strong>Dropped requests</strong> - In-flight requests are terminated</li>
+<li><strong>Connection resets</strong> - Clients see connection errors</li>
+<li><strong>Data corruption</strong> - Partial operations may leave inconsistent state</li>
+</ul>
+<h2 id="the-solution"><a class="header" href="#the-solution">The Solution</a></h2>
+<p>Graceful draining solves this by:</p>
+<ol>
+<li><strong>Loading the new handler</strong> before removing the old one</li>
+<li><strong>Routing new requests</strong> to the new handler immediately</li>
+<li><strong>Allowing old requests</strong> to complete on the old handler</li>
+<li><strong>Unloading the old handler</strong> only when fully drained</li>
+</ol>
+<h2 id="timeline"><a class="header" href="#timeline">Timeline</a></h2>
+<pre><code>Time ──────────────────────────────────────────────────────────▶
+
+Old Handler:  ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+              (handling)  (draining)  (unloaded)
+
+New Handler:  ░░░░░░░░░░░░████████████████████████████████████████
+                          (handling new requests)
+
+                    ▲
+                    │ Swap point
+</code></pre>
+<h2 id="how-it-works-3"><a class="header" href="#how-it-works-3">How It Works</a></h2>
+<h3 id="1-request-tracking"><a class="header" href="#1-request-tracking">1. Request Tracking</a></h3>
+<p>Each handler tracks active requests using atomic counters:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct LoadedHandler {
+    active_requests: AtomicU64,
+    draining: AtomicBool,
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="2-request-guards"><a class="header" href="#2-request-guards">2. Request Guards</a></h3>
+<p>When a request starts, a guard is acquired:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let guard = handler.acquire_request()?;
+// Request is processed...
+// Guard is dropped when request completes
+<span class="boring">}</span></code></pre></pre>
+<p>The guard:</p>
+<ul>
+<li>Increments <code>active_requests</code> on creation</li>
+<li>Decrements <code>active_requests</code> on drop</li>
+<li>Returns <code>None</code> if handler is draining</li>
+</ul>
+<h3 id="3-graceful-swap"><a class="header" href="#3-graceful-swap">3. Graceful Swap</a></h3>
+<p>When swapping handlers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let result = registry.swap_graceful(
+    "my-endpoint",
+    new_library_path,
+    Duration::from_secs(30)  // drain timeout
+).await?;
+<span class="boring">}</span></code></pre></pre>
+<p>This:</p>
+<ol>
+<li>Loads the new handler</li>
+<li>Atomically swaps the active handler</li>
+<li>Marks the old handler as draining</li>
+<li>Spawns a background task to monitor draining</li>
+<li>Returns immediately (non-blocking)</li>
+</ol>
+<h3 id="4-drain-monitoring"><a class="header" href="#4-drain-monitoring">4. Drain Monitoring</a></h3>
+<p>A background task monitors the old handler:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>while !old_handler.is_drained() {
+    if elapsed &gt; drain_timeout {
+        // Force unload after timeout
+        break;
+    }
+    tokio::time::sleep(Duration::from_millis(100)).await;
+}
+// Old handler is now safe to unload
+<span class="boring">}</span></code></pre></pre>
+<h2 id="api"><a class="header" href="#api">API</a></h2>
+<h3 id="swap-with-draining"><a class="header" href="#swap-with-draining">Swap with Draining</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let result = registry.swap_graceful(
+    endpoint_id,
+    new_path,
+    drain_timeout
+).await?;
+
+// Result contains:
+// - swapped: bool - Whether swap succeeded
+// - old_requests_pending: u64 - Requests still in flight
+// - draining: bool - Whether old handler is draining
+<span class="boring">}</span></code></pre></pre>
+<h3 id="check-draining-status"><a class="header" href="#check-draining-status">Check Draining Status</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Is handler accepting new requests?
+let accepting = !handler.is_draining();
+
+// Is handler fully drained?
+let drained = handler.is_drained();
+
+// How many requests are in flight?
+let active = handler.active_request_count();
+<span class="boring">}</span></code></pre></pre>
+<h3 id="get-statistics"><a class="header" href="#get-statistics">Get Statistics</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let stats = registry.stats().await;
+
+println!("Active handlers: {}", stats.loaded_count);
+println!("Draining handlers: {}", stats.draining_count);
+println!("Active requests: {}", stats.active_requests);
+println!("Draining requests: {}", stats.draining_requests);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="drain-timeout-1"><a class="header" href="#drain-timeout-1">Drain Timeout</a></h2>
+<p>The drain timeout determines how long to wait for requests to complete:</p>
+<div class="table-wrapper"><table><thead><tr><th>Timeout</th><th>Use Case</th></tr></thead><tbody>
+<tr><td>5s</td><td>Fast APIs with quick responses</td></tr>
+<tr><td>30s</td><td>Standard web applications</td></tr>
+<tr><td>60s</td><td>Long-running operations</td></tr>
+<tr><td>300s</td><td>File uploads, batch processing</td></tr>
+</tbody></table>
+</div>
+<p>If the timeout expires, the old handler is forcefully unloaded. Any remaining requests will fail.</p>
+<h2 id="best-practices-4"><a class="header" href="#best-practices-4">Best Practices</a></h2>
+<h3 id="1-set-appropriate-timeouts"><a class="header" href="#1-set-appropriate-timeouts">1. Set Appropriate Timeouts</a></h3>
+<p>Match your drain timeout to your longest expected request:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// For a file upload endpoint
+registry.swap_graceful(
+    "upload-endpoint",
+    new_path,
+    Duration::from_secs(300)  // 5 minutes for large uploads
+).await?;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="2-monitor-draining"><a class="header" href="#2-monitor-draining">2. Monitor Draining</a></h3>
+<p>Log draining status for observability:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>if result.draining {
+    tracing::info!(
+        endpoint = endpoint_id,
+        pending = result.old_requests_pending,
+        "Handler draining"
+    );
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="3-handle-drain-rejection"><a class="header" href="#3-handle-drain-rejection">3. Handle Drain Rejection</a></h3>
+<p>When a handler is draining, new requests are rejected:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>match handler.acquire_request() {
+    Some(guard) =&gt; {
+        // Process request
+    }
+    None =&gt; {
+        // Handler is draining, return 503
+        return Response::service_unavailable("Handler updating, retry shortly");
+    }
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="4-cleanup-drained-handlers"><a class="header" href="#4-cleanup-drained-handlers">4. Cleanup Drained Handlers</a></h3>
+<p>Periodically clean up fully drained handlers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// In a background task
+loop {
+    registry.cleanup_drained().await;
+    tokio::time::sleep(Duration::from_secs(60)).await;
+}
+<span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="hello-world"><a class="header" href="#hello-world">Hello World</a></h1>
 <p>The simplest possible handler.</p>
 <h2 id="code"><a class="header" href="#code">Code</a></h2>
@@ -2472,13 +3256,12 @@ fn handle(req: Request) -&gt; Response {
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(_req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(_ctx: &amp;Context, _req: Request) -&gt; Response {
     Response::ok(json!({
         "message": "Hello, World!"
     }))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h2 id="endpoint-configuration"><a class="header" href="#endpoint-configuration">Endpoint Configuration</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody>
@@ -2499,7 +3282,8 @@ handler_loop!(handle);
 <h3 id="with-request-info"><a class="header" href="#with-request-info">With Request Info</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     Response::ok(json!({
         "message": "Hello, World!",
         "method": req.method,
@@ -2511,14 +3295,16 @@ handler_loop!(handle);
 <h3 id="plain-text"><a class="header" href="#plain-text">Plain Text</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(_req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, _req: Request) -&gt; Response {
     Response::text(200, "Hello, World!")
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="html"><a class="header" href="#html">HTML</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(_req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, _req: Request) -&gt; Response {
     Response::new(200)
         .with_header("Content-Type", "text/html")
         .with_body("&lt;h1&gt;Hello, World!&lt;/h1&gt;")
@@ -2544,39 +3330,36 @@ struct Item {
     name: String,
     description: Option&lt;String&gt;,
     price: f64,
-    created_at: String,
 }
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Parse request body
     let input: CreateItem = match req.json() {
         Ok(data) =&gt; data,
         Err(e) =&gt; return Response::bad_request(format!("Invalid JSON: {}", e)),
     };
-    
+
     // Validate
     if input.name.is_empty() {
         return Response::bad_request("Name is required");
     }
-    
+
     if input.price &lt; 0.0 {
         return Response::bad_request("Price must be non-negative");
     }
-    
-    // Create item (in real app, save to database)
+
+    // Create item (in real app, save to database via ctx)
     let item = Item {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
         description: input.description,
         price: input.price,
-        created_at: chrono::Utc::now().to_rfc3339(),
     };
-    
+
     // Return 201 Created
     Response::created(item)
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h2 id="endpoint-configuration-1"><a class="header" href="#endpoint-configuration-1">Endpoint Configuration</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody>
@@ -2600,42 +3383,33 @@ handler_loop!(handle);
 }
 </code></pre>
 <h2 id="full-crud-example"><a class="header" href="#full-crud-example">Full CRUD Example</a></h2>
-<p>For a complete CRUD API, create multiple endpoints:</p>
+<p>For a complete CRUD API with database access:</p>
 <h3 id="get-items---list-items"><a class="header" href="#get-items---list-items">GET /items - List Items</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(_req: Request) -&gt; Response {
-    // In real app, fetch from database
-    let items = vec![
-        json!({"id": "1", "name": "Item 1"}),
-        json!({"id": "2", "name": "Item 2"}),
-    ];
-    
-    Response::ok(json!({
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, _req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let db = ctx.database("main-db").await?;
+    let items = db.query("SELECT id, name FROM items", &amp;[]).await?;
+
+    Ok(Response::ok(json!({
         "items": items,
         "count": items.len(),
-    }))
+    })))
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="get-itemsid---get-item"><a class="header" href="#get-itemsid---get-item">GET /items/{id} - Get Item</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    let id = match req.path_param("id") {
-        Some(id) =&gt; id,
-        None =&gt; return Response::bad_request("Missing ID"),
-    };
-    
-    // In real app, fetch from database
-    if id == "1" {
-        Response::ok(json!({
-            "id": "1",
-            "name": "Item 1",
-            "price": 9.99,
-        }))
-    } else {
-        Response::not_found()
-    }
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path_param("id")
+        .ok_or_else(|| HandlerError::ValidationError("Missing ID".into()))?;
+
+    let db = ctx.database("main-db").await?;
+    let item = db.query_one("SELECT * FROM items WHERE id = $1", &amp;[&amp;id]).await?;
+
+    Ok(Response::ok(item))
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="put-itemsid---update-item"><a class="header" href="#put-itemsid---update-item">PUT /items/{id} - Update Item</a></h3>
@@ -2647,38 +3421,34 @@ struct UpdateItem {
     price: Option&lt;f64&gt;,
 }
 
-fn handle(req: Request) -&gt; Response {
-    let id = match req.path_param("id") {
-        Some(id) =&gt; id.clone(),
-        None =&gt; return Response::bad_request("Missing ID"),
-    };
-    
-    let update: UpdateItem = match req.json() {
-        Ok(data) =&gt; data,
-        Err(e) =&gt; return Response::bad_request(format!("Invalid JSON: {}", e)),
-    };
-    
-    // In real app, update in database
-    Response::ok(json!({
-        "id": id,
-        "name": update.name.unwrap_or("Unchanged".to_string()),
-        "updated": true,
-    }))
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path_param("id")
+        .ok_or_else(|| HandlerError::ValidationError("Missing ID".into()))?;
+
+    let update: UpdateItem = req.json()?;
+
+    let db = ctx.database("main-db").await?;
+    db.execute(
+        "UPDATE items SET name = COALESCE($1, name), price = COALESCE($2, price) WHERE id = $3",
+        &amp;[&amp;update.name, &amp;update.price, &amp;id]
+    ).await?;
+
+    Ok(Response::ok(json!({"id": id, "updated": true})))
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="delete-itemsid---delete-item"><a class="header" href="#delete-itemsid---delete-item">DELETE /items/{id} - Delete Item</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    let id = match req.path_param("id") {
-        Some(id) =&gt; id,
-        None =&gt; return Response::bad_request("Missing ID"),
-    };
-    
-    // In real app, delete from database
-    eprintln!("Deleted item: {}", id);
-    
-    Response::no_content()
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path_param("id")
+        .ok_or_else(|| HandlerError::ValidationError("Missing ID".into()))?;
+
+    let db = ctx.database("main-db").await?;
+    db.execute("DELETE FROM items WHERE id = $1", &amp;[&amp;id]).await?;
+
+    Ok(Response::no_content())
 }
 <span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="path-parameters-2"><a class="header" href="#path-parameters-2">Path Parameters</a></h1>
@@ -2689,20 +3459,19 @@ fn handle(req: Request) -&gt; Response {
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Extract the {id} parameter
     let user_id = match req.path_param("id") {
         Some(id) =&gt; id,
         None =&gt; return Response::bad_request("Missing user ID"),
     };
-    
+
     Response::ok(json!({
         "user_id": user_id,
         "message": format!("Fetching user {}", user_id),
     }))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h2 id="test-2"><a class="header" href="#test-2">Test</a></h2>
 <pre><code class="language-bash">curl http://localhost:9080/users/123
@@ -2717,10 +3486,11 @@ handler_loop!(handle);
 <p><strong>Endpoint Path:</strong> <code>/users/{user_id}/posts/{post_id}</code></p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     let user_id = req.path_param("user_id");
     let post_id = req.path_param("post_id");
-    
+
     match (user_id, post_id) {
         (Some(uid), Some(pid)) =&gt; {
             Response::ok(json!({
@@ -2745,25 +3515,30 @@ handler_loop!(handle);
 <p>Path parameters are always strings. Convert them to other types:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    let id_str = req.path_param("id")
-        .ok_or("Missing ID")?;
-    
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
+    let id_str = match req.path_param("id") {
+        Some(id) =&gt; id,
+        None =&gt; return Response::bad_request("Missing ID"),
+    };
+
     // Parse to integer
     let id: i64 = match id_str.parse() {
         Ok(n) =&gt; n,
         Err(_) =&gt; return Response::bad_request("ID must be a number"),
     };
-    
+
     // Parse to UUID
-    let uuid_str = req.path_param("uuid")
-        .ok_or("Missing UUID")?;
-    
+    let uuid_str = match req.path_param("uuid") {
+        Some(u) =&gt; u,
+        None =&gt; return Response::bad_request("Missing UUID"),
+    };
+
     let uuid = match uuid::Uuid::parse_str(uuid_str) {
         Ok(u) =&gt; u,
         Err(_) =&gt; return Response::bad_request("Invalid UUID format"),
     };
-    
+
     Response::ok(json!({
         "id": id,
         "uuid": uuid.to_string(),
@@ -2773,12 +3548,13 @@ handler_loop!(handle);
 <h2 id="optional-parameters-with-defaults"><a class="header" href="#optional-parameters-with-defaults">Optional Parameters with Defaults</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Get page number, default to 1
     let page: u32 = req.path_param("page")
         .and_then(|p| p.parse().ok())
         .unwrap_or(1);
-    
+
     Response::ok(json!({"page": page}))
 }
 <span class="boring">}</span></code></pre></pre>
@@ -2795,39 +3571,48 @@ handler_loop!(handle);
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// GET /users/{id}
-fn get_user(req: Request) -&gt; Response {
+#[handler]
+pub async fn get_user(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
     let id = req.path_param("id").unwrap();
-    // Fetch user by ID
-    Response::ok(json!({"id": id, "name": "John"}))
+    let db = ctx.database("main-db").await?;
+    let user = db.query_one("SELECT * FROM users WHERE id = $1", &amp;[&amp;id]).await?;
+    Ok(Response::ok(user))
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="nested-resources"><a class="header" href="#nested-resources">Nested Resources</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// GET /organizations/{org_id}/teams/{team_id}/members
-fn get_team_members(req: Request) -&gt; Response {
+#[handler]
+pub async fn get_team_members(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
     let org_id = req.path_param("org_id").unwrap();
     let team_id = req.path_param("team_id").unwrap();
-    
-    Response::ok(json!({
+
+    let db = ctx.database("main-db").await?;
+    let members = db.query(
+        "SELECT * FROM members WHERE org_id = $1 AND team_id = $2",
+        &amp;[&amp;org_id, &amp;team_id]
+    ).await?;
+
+    Ok(Response::ok(json!({
         "organization": org_id,
         "team": team_id,
-        "members": ["alice", "bob"],
-    }))
+        "members": members,
+    })))
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="slug-based-routes"><a class="header" href="#slug-based-routes">Slug-based Routes</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>// GET /blog/{slug}
-fn get_blog_post(req: Request) -&gt; Response {
+#[handler]
+pub async fn get_blog_post(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
     let slug = req.path_param("slug").unwrap();
-    
-    // Lookup by slug
-    Response::ok(json!({
-        "slug": slug,
-        "title": format!("Post: {}", slug),
-    }))
+
+    let db = ctx.database("main-db").await?;
+    let post = db.query_one("SELECT * FROM posts WHERE slug = $1", &amp;[&amp;slug]).await?;
+
+    Ok(Response::ok(post))
 }
 <span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="query-parameters-2"><a class="header" href="#query-parameters-2">Query Parameters</a></h1>
@@ -2838,23 +3623,22 @@ fn get_blog_post(req: Request) -&gt; Response {
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Get query parameter
     let query = req.query_param("q")
         .map(|s| s.to_string())
         .unwrap_or_default();
-    
+
     if query.is_empty() {
         return Response::bad_request("Missing search query");
     }
-    
+
     Response::ok(json!({
         "query": query,
         "results": [],
     }))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h2 id="test-4"><a class="header" href="#test-4">Test</a></h2>
 <pre><code class="language-bash">curl "http://localhost:9080/search?q=rust"
@@ -2868,19 +3652,20 @@ handler_loop!(handle);
 <h2 id="pagination-example"><a class="header" href="#pagination-example">Pagination Example</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Parse pagination parameters with defaults
     let page: u32 = req.query_param("page")
         .and_then(|p| p.parse().ok())
         .unwrap_or(1);
-    
+
     let limit: u32 = req.query_param("limit")
         .and_then(|l| l.parse().ok())
         .unwrap_or(10)
         .min(100);  // Cap at 100
-    
+
     let offset = (page - 1) * limit;
-    
+
     Response::ok(json!({
         "page": page,
         "limit": limit,
@@ -2903,7 +3688,8 @@ handler_loop!(handle);
 <h2 id="filtering-example"><a class="header" href="#filtering-example">Filtering Example</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Get filter parameters
     let status = req.query_param("status");
     let category = req.query_param("category");
@@ -2911,7 +3697,7 @@ handler_loop!(handle);
         .and_then(|p| p.parse().ok());
     let max_price: Option&lt;f64&gt; = req.query_param("max_price")
         .and_then(|p| p.parse().ok());
-    
+
     Response::ok(json!({
         "filters": {
             "status": status,
@@ -2931,15 +3717,16 @@ handler_loop!(handle);
 <h2 id="sorting-example"><a class="header" href="#sorting-example">Sorting Example</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     let sort_by = req.query_param("sort")
         .map(|s| s.to_string())
         .unwrap_or_else(|| "created_at".to_string());
-    
+
     let order = req.query_param("order")
         .map(|s| s.to_string())
         .unwrap_or_else(|| "desc".to_string());
-    
+
     // Validate sort field
     let valid_fields = ["name", "created_at", "price", "popularity"];
     if !valid_fields.contains(&amp;sort_by.as_str()) {
@@ -2947,7 +3734,7 @@ handler_loop!(handle);
             "Invalid sort field. Valid options: {:?}", valid_fields
         ));
     }
-    
+
     Response::ok(json!({
         "sort": {
             "field": sort_by,
@@ -2960,16 +3747,17 @@ handler_loop!(handle);
 <h2 id="boolean-parameters"><a class="header" href="#boolean-parameters">Boolean Parameters</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Parse boolean parameters
     let include_deleted = req.query_param("include_deleted")
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
-    
+
     let verbose = req.query_param("verbose")
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
-    
+
     Response::ok(json!({
         "include_deleted": include_deleted,
         "verbose": verbose,
@@ -2980,12 +3768,13 @@ handler_loop!(handle);
 <p>Access all query parameters at once:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Log all query parameters
     for (key, value) in &amp;req.query {
         eprintln!("Query param: {} = {}", key, value);
     }
-    
+
     Response::ok(json!({
         "query_params": req.query,
     }))
@@ -2999,49 +3788,49 @@ handler_loop!(handle);
     let page: u32 = req.query_param("page")
         .and_then(|p| p.parse().ok())
         .unwrap_or(1);
-    
+
     if page == 0 {
         return Err(Response::bad_request("Page must be &gt;= 1"));
     }
-    
+
     let limit: u32 = req.query_param("limit")
         .and_then(|l| l.parse().ok())
         .unwrap_or(10);
-    
+
     if limit &gt; 100 {
         return Err(Response::bad_request("Limit must be &lt;= 100"));
     }
-    
+
     Ok((page, limit))
 }
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     let (page, limit) = match parse_pagination(&amp;req) {
         Ok(p) =&gt; p,
         Err(response) =&gt; return response,
     };
-    
+
     Response::ok(json!({"page": page, "limit": limit}))
 }
 <span class="boring">}</span></code></pre></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="error-handling-4"><a class="header" href="#error-handling-4">Error Handling</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="error-handling-5"><a class="header" href="#error-handling-5">Error Handling</a></h1>
 <p>Robust error handling patterns for handlers.</p>
 <h2 id="basic-pattern"><a class="header" href="#basic-pattern">Basic Pattern</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
-    match process_request(&amp;req) {
-        Ok(data) =&gt; Response::ok(data),
-        Err(e) =&gt; e.to_response(),
-    }
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let data = process_request(&amp;req)?;
+    Ok(Response::ok(data))
 }
 
 fn process_request(req: &amp;Request) -&gt; Result&lt;JsonValue, HandlerError&gt; {
     let input: CreateUser = req.json()
         .map_err(|e| HandlerError::ValidationError(e.to_string()))?;
-    
+
     // Process and return result
     Ok(json!({"id": "123", "name": input.name}))
 }
@@ -3050,8 +3839,6 @@ fn process_request(req: &amp;Request) -&gt; Result&lt;JsonValue, HandlerError&gt
 struct CreateUser {
     name: String,
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h2 id="error-types-and-status-codes"><a class="header" href="#error-types-and-status-codes">Error Types and Status Codes</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -3103,35 +3890,29 @@ fn validate_input(input: &amp;RegisterUser) -&gt; Result&lt;(), HandlerError&gt;
             "Invalid email format".into()
         ));
     }
-    
+
     // Password validation
     if input.password.len() &lt; 8 {
         return Err(HandlerError::ValidationError(
             "Password must be at least 8 characters".into()
         ));
     }
-    
+
     // Name validation
     if input.name.trim().is_empty() {
         return Err(HandlerError::ValidationError(
             "Name is required".into()
         ));
     }
-    
+
     Ok(())
 }
 
-fn handle(req: Request) -&gt; Response {
-    let input: RegisterUser = match req.json() {
-        Ok(i) =&gt; i,
-        Err(e) =&gt; return Response::bad_request(format!("Invalid JSON: {}", e)),
-    };
-    
-    if let Err(e) = validate_input(&amp;input) {
-        return e.to_response();
-    }
-    
-    Response::created(json!({"email": input.email}))
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let input: RegisterUser = req.json()?;
+    validate_input(&amp;input)?;
+    Ok(Response::created(json!({"email": input.email})))
 }
 <span class="boring">}</span></code></pre></pre>
 <h2 id="custom-error-type"><a class="header" href="#custom-error-type">Custom Error Type</a></h2>
@@ -3167,31 +3948,31 @@ fn process(req: &amp;Request) -&gt; Result&lt;JsonValue, AppError&gt; {
     Err(AppError::InvalidCredentials)
 }
 
-fn handle(req: Request) -&gt; Response {
-    match process(&amp;req) {
-        Ok(data) =&gt; Response::ok(data),
-        Err(e) =&gt; HandlerError::from(e).to_response(),
-    }
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let data = process(&amp;req)?;
+    Ok(Response::ok(data))
 }
 <span class="boring">}</span></code></pre></pre>
 <h2 id="logging-errors-1"><a class="header" href="#logging-errors-1">Logging Errors</a></h2>
 <p>Always log errors for debugging:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
     match process(&amp;req) {
-        Ok(data) =&gt; Response::ok(data),
+        Ok(data) =&gt; Ok(Response::ok(data)),
         Err(e) =&gt; {
             // Log with request ID for tracing
             eprintln!("[{}] Error: {}", req.request_id, e);
-            
+
             // Log stack trace for internal errors
             if matches!(e, HandlerError::Internal(_) | HandlerError::DatabaseError(_)) {
                 eprintln!("[{}] Request path: {}", req.request_id, req.path);
                 eprintln!("[{}] Request body: {:?}", req.request_id, req.body);
             }
-            
-            e.to_response()
+
+            Err(e)
         }
     }
 }
@@ -3200,40 +3981,41 @@ fn handle(req: Request) -&gt; Response {
 <p>Handle service failures gracefully:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    let redis = RedisPool { pool_id: "cache".to_string() };
-    let db = DbPool { pool_id: "main".to_string() };
-    
-    // Try cache first
-    let cached = redis.get("data:key");
-    
-    match cached {
-        Ok(Some(data)) =&gt; {
-            return Response::ok(json!({"source": "cache", "data": data}));
-        }
-        Ok(None) =&gt; { /* Cache miss, continue */ }
-        Err(e) =&gt; {
-            // Log but don't fail - Redis being down shouldn't break the app
-            eprintln!("Redis error (non-fatal): {}", e);
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, _req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let cache = ctx.cache("redis").await;
+    let db = ctx.database("main").await?;
+
+    // Try cache first (non-fatal if unavailable)
+    if let Ok(cache) = cache {
+        match cache.get("data:key").await {
+            Ok(Some(data)) =&gt; {
+                return Ok(Response::ok(json!({"source": "cache", "data": data})));
+            }
+            Ok(None) =&gt; { /* Cache miss, continue */ }
+            Err(e) =&gt; {
+                // Log but don't fail - Redis being down shouldn't break the app
+                eprintln!("Redis error (non-fatal): {}", e);
+            }
         }
     }
-    
+
     // Fallback to database
-    match db.query("SELECT * FROM data", &amp;[]) {
-        Ok(result) =&gt; Response::ok(json!({"source": "db", "data": result.rows})),
+    match db.query("SELECT * FROM data", &amp;[]).await {
+        Ok(result) =&gt; Ok(Response::ok(json!({"source": "db", "data": result}))),
         Err(e) =&gt; {
             eprintln!("Database error: {}", e);
-            Response::json(503, json!({
+            Ok(Response::json(503, json!({
                 "error": "Service temporarily unavailable",
                 "retry_after": 5,
-            }))
+            })))
         }
     }
 }
 <span class="boring">}</span></code></pre></pre>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="pet-store-demo"><a class="header" href="#pet-store-demo">Pet Store Demo</a></h1>
 <p>A complete REST API example demonstrating the same Pet Store API working with multiple storage backends.</p>
-<h2 id="overview-2"><a class="header" href="#overview-2">Overview</a></h2>
+<h2 id="overview-4"><a class="header" href="#overview-4">Overview</a></h2>
 <p>The Pet Store demo shows how Rust Edge Gateway's <code>Storage</code> abstraction allows the <strong>same handler code</strong> to work with:</p>
 <ul>
 <li><strong>SQLite</strong> - Embedded database (no external dependencies)</li>
@@ -3270,27 +4052,21 @@ fn handle(req: Request) -&gt; Response {
 </tbody></table>
 </div>
 <h2 id="storage-abstraction-1"><a class="header" href="#storage-abstraction-1">Storage Abstraction</a></h2>
-<p>The key to multi-backend support is the <code>Storage</code> type:</p>
+<p>The key to multi-backend support is the Context API:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn get_storage() -&gt; Storage {
-    // Choose one:
-    Storage::database("petstore", "pets")           // SQLite/PostgreSQL/MySQL
-    Storage::object_storage("petstore", "pets")     // MinIO/S3
-    Storage::file_storage("petstore", "pets")       // FTP/SFTP
-}
+#[handler]
+pub async fn handle(ctx: &amp;Context, _req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    // Access storage via Context - backend is configured in Admin UI
+    let storage = ctx.storage("petstore").await?;
 
-fn handle(req: Request) -&gt; Response {
-    let storage = get_storage();
-    
-    match storage.list(None) {
-        Ok(pets) =&gt; Response::ok(json!({"pets": pets})),
-        Err(e) =&gt; e.to_response(),
-    }
+    let pets = storage.list("pets/").await?;
+    Ok(Response::ok(json!({"pets": pets})))
 }
 <span class="boring">}</span></code></pre></pre>
+<p>The storage backend (database, S3, FTP) is configured in the Admin UI, not in code.</p>
 <h2 id="storage-api"><a class="header" href="#storage-api">Storage API</a></h2>
 <p>All storage backends implement the same interface:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
@@ -3535,7 +4311,7 @@ Content-Type: multipart/form-data
 <p>List endpoints will support pagination in future versions:</p>
 <pre><code class="language-bash">GET /api/endpoints?page=1&amp;limit=20
 </code></pre>
-<h3 id="error-handling-5"><a class="header" href="#error-handling-5">Error Handling</a></h3>
+<h3 id="error-handling-6"><a class="header" href="#error-handling-6">Error Handling</a></h3>
 <p>Always check the <code>ok</code> field in responses:</p>
 <pre><code class="language-javascript">const response = await fetch('/api/endpoints');
 const data = await response.json();

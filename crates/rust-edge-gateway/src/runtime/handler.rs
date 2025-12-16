@@ -20,16 +20,16 @@ use rust_edge_gateway_sdk::{Request, Response};
 use super::context::Context;
 
 /// Type alias for the handler entry point function
-/// 
+///
 /// All handlers must export a function with this signature:
 /// ```ignore
 /// #[no_mangle]
-/// pub extern "C" fn handler_entry(
-///     ctx: &Context,
-///     req: Request,
-/// ) -> Pin<Box<dyn Future<Output = Response> + Send>>
+/// pub extern "C" fn handler_entry(req: Request) -> Response
 /// ```
-pub type HandlerFn = unsafe extern "C" fn(&Context, Request) -> Pin<Box<dyn Future<Output = Response> + Send>>;
+///
+/// This is a synchronous signature for simplicity. Handlers that need async
+/// operations should use tokio's block_on or similar.
+pub type HandlerFn = unsafe extern "C" fn(Request) -> Response;
 
 /// A loaded handler with its library
 pub struct LoadedHandler {
@@ -116,12 +116,9 @@ impl LoadedHandler {
     ///
     /// # Safety
     /// Calls into dynamically loaded code. The handler must be well-behaved.
-    pub async fn execute(&self, ctx: &Context, req: Request) -> Response {
-        // Call the handler entry point
-        let future = unsafe { (self.entry)(ctx, req) };
-
-        // Await the future
-        future.await
+    pub fn execute(&self, _ctx: &Context, req: Request) -> Response {
+        // Call the handler entry point (synchronous)
+        unsafe { (self.entry)(req) }
     }
 
     /// Increment active request count and return a guard

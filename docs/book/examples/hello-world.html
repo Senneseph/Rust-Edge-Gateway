@@ -188,13 +188,12 @@
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(_req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(_ctx: &amp;Context, _req: Request) -&gt; Response {
     Response::ok(json!({
         "message": "Hello, World!"
     }))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h2 id="endpoint-configuration"><a class="header" href="#endpoint-configuration">Endpoint Configuration</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody>
@@ -215,7 +214,8 @@ handler_loop!(handle);
 <h3 id="with-request-info"><a class="header" href="#with-request-info">With Request Info</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     Response::ok(json!({
         "message": "Hello, World!",
         "method": req.method,
@@ -227,14 +227,16 @@ handler_loop!(handle);
 <h3 id="plain-text"><a class="header" href="#plain-text">Plain Text</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(_req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, _req: Request) -&gt; Response {
     Response::text(200, "Hello, World!")
 }
 <span class="boring">}</span></code></pre></pre>
 <h3 id="html"><a class="header" href="#html">HTML</a></h3>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(_req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, _req: Request) -&gt; Response {
     Response::new(200)
         .with_header("Content-Type", "text/html")
         .with_body("&lt;h1&gt;Hello, World!&lt;/h1&gt;")
@@ -245,7 +247,7 @@ handler_loop!(handle);
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../sdk/services/email.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../architecture/graceful-draining.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -259,7 +261,7 @@ handler_loop!(handle);
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../sdk/services/email.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../architecture/graceful-draining.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 

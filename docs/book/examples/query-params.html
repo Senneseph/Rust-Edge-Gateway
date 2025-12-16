@@ -189,23 +189,22 @@
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Get query parameter
     let query = req.query_param("q")
         .map(|s| s.to_string())
         .unwrap_or_default();
-    
+
     if query.is_empty() {
         return Response::bad_request("Missing search query");
     }
-    
+
     Response::ok(json!({
         "query": query,
         "results": [],
     }))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h2 id="test"><a class="header" href="#test">Test</a></h2>
 <pre><code class="language-bash">curl "http://localhost:9080/search?q=rust"
@@ -219,19 +218,20 @@ handler_loop!(handle);
 <h2 id="pagination-example"><a class="header" href="#pagination-example">Pagination Example</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Parse pagination parameters with defaults
     let page: u32 = req.query_param("page")
         .and_then(|p| p.parse().ok())
         .unwrap_or(1);
-    
+
     let limit: u32 = req.query_param("limit")
         .and_then(|l| l.parse().ok())
         .unwrap_or(10)
         .min(100);  // Cap at 100
-    
+
     let offset = (page - 1) * limit;
-    
+
     Response::ok(json!({
         "page": page,
         "limit": limit,
@@ -254,7 +254,8 @@ handler_loop!(handle);
 <h2 id="filtering-example"><a class="header" href="#filtering-example">Filtering Example</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Get filter parameters
     let status = req.query_param("status");
     let category = req.query_param("category");
@@ -262,7 +263,7 @@ handler_loop!(handle);
         .and_then(|p| p.parse().ok());
     let max_price: Option&lt;f64&gt; = req.query_param("max_price")
         .and_then(|p| p.parse().ok());
-    
+
     Response::ok(json!({
         "filters": {
             "status": status,
@@ -282,15 +283,16 @@ handler_loop!(handle);
 <h2 id="sorting-example"><a class="header" href="#sorting-example">Sorting Example</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     let sort_by = req.query_param("sort")
         .map(|s| s.to_string())
         .unwrap_or_else(|| "created_at".to_string());
-    
+
     let order = req.query_param("order")
         .map(|s| s.to_string())
         .unwrap_or_else(|| "desc".to_string());
-    
+
     // Validate sort field
     let valid_fields = ["name", "created_at", "price", "popularity"];
     if !valid_fields.contains(&amp;sort_by.as_str()) {
@@ -298,7 +300,7 @@ handler_loop!(handle);
             "Invalid sort field. Valid options: {:?}", valid_fields
         ));
     }
-    
+
     Response::ok(json!({
         "sort": {
             "field": sort_by,
@@ -311,16 +313,17 @@ handler_loop!(handle);
 <h2 id="boolean-parameters"><a class="header" href="#boolean-parameters">Boolean Parameters</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Parse boolean parameters
     let include_deleted = req.query_param("include_deleted")
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
-    
+
     let verbose = req.query_param("verbose")
         .map(|v| v == "true" || v == "1")
         .unwrap_or(false);
-    
+
     Response::ok(json!({
         "include_deleted": include_deleted,
         "verbose": verbose,
@@ -331,12 +334,13 @@ handler_loop!(handle);
 <p>Access all query parameters at once:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     // Log all query parameters
     for (key, value) in &amp;req.query {
         eprintln!("Query param: {} = {}", key, value);
     }
-    
+
     Response::ok(json!({
         "query_params": req.query,
     }))
@@ -350,28 +354,29 @@ handler_loop!(handle);
     let page: u32 = req.query_param("page")
         .and_then(|p| p.parse().ok())
         .unwrap_or(1);
-    
+
     if page == 0 {
         return Err(Response::bad_request("Page must be &gt;= 1"));
     }
-    
+
     let limit: u32 = req.query_param("limit")
         .and_then(|l| l.parse().ok())
         .unwrap_or(10);
-    
+
     if limit &gt; 100 {
         return Err(Response::bad_request("Limit must be &lt;= 100"));
     }
-    
+
     Ok((page, limit))
 }
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(_ctx: &amp;Context, req: Request) -&gt; Response {
     let (page, limit) = match parse_pagination(&amp;req) {
         Ok(p) =&gt; p,
         Err(response) =&gt; return response,
     };
-    
+
     Response::ok(json!({"page": page, "limit": limit}))
 }
 <span class="boring">}</span></code></pre></pre>

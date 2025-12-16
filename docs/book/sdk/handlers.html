@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Handler Macros - Rust Edge Gateway</title>
+        <title>Handler Attribute - Rust Edge Gateway</title>
 
 
         <!-- Custom HTML head -->
@@ -181,31 +181,51 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="handler-macros"><a class="header" href="#handler-macros">Handler Macros</a></h1>
-<p>The SDK provides several macros for running handler loops with different patterns.</p>
+                        <h1 id="handler-attribute"><a class="header" href="#handler-attribute">Handler Attribute</a></h1>
+<p>The SDK provides the <code>#[handler]</code> attribute macro for creating handler entry points.</p>
 <h2 id="quick-reference"><a class="header" href="#quick-reference">Quick Reference</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Macro</th><th>Handler Signature</th><th>Use Case</th></tr></thead><tbody>
-<tr><td><code>handler_loop!</code></td><td><code>fn(Request) -&gt; Response</code></td><td>Simple sync handlers</td></tr>
-<tr><td><code>handler_loop_result!</code></td><td><code>fn(Request) -&gt; Result&lt;Response, HandlerError&gt;</code></td><td>Sync with error handling</td></tr>
-<tr><td><code>handler_loop_async!</code></td><td><code>async fn(Request) -&gt; Response</code></td><td>Async handlers</td></tr>
-<tr><td><code>handler_loop_async_result!</code></td><td><code>async fn(Request) -&gt; Result&lt;Response, HandlerError&gt;</code></td><td>Async with error handling</td></tr>
+<div class="table-wrapper"><table><thead><tr><th>Pattern</th><th>Handler Signature</th><th>Use Case</th></tr></thead><tbody>
+<tr><td>Basic</td><td><code>async fn(&amp;Context, Request) -&gt; Response</code></td><td>Standard handlers</td></tr>
+<tr><td>With Result</td><td><code>async fn(&amp;Context, Request) -&gt; Result&lt;Response, HandlerError&gt;</code></td><td>Error handling with <code>?</code></td></tr>
 </tbody></table>
 </div>
-<h2 id="sync-handlers"><a class="header" href="#sync-handlers">Sync Handlers</a></h2>
-<h3 id="handler_loop"><a class="header" href="#handler_loop"><code>handler_loop!</code></a></h3>
-<p>For simple synchronous handlers that return a <code>Response</code> directly.</p>
+<h2 id="the-handler-attribute"><a class="header" href="#the-handler-attribute">The Handler Attribute</a></h2>
+<p>The <code>#[handler]</code> attribute generates the dynamic library entry point:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     Response::ok(json!({"path": req.path, "method": req.method}))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
-<h3 id="handler_loop_result"><a class="header" href="#handler_loop_result"><code>handler_loop_result!</code></a></h3>
-<p>For handlers that return <code>Result&lt;Response, HandlerError&gt;</code>. Errors are automatically converted to HTTP responses.</p>
+<p>This generates a <code>handler_entry</code> symbol that the gateway loads and calls directly.</p>
+<h2 id="handler-signature"><a class="header" href="#handler-signature">Handler Signature</a></h2>
+<p>All handlers receive:</p>
+<ul>
+<li><code>ctx: &amp;Context</code> - Access to Service Actors (database, cache, storage)</li>
+<li><code>req: Request</code> - The incoming HTTP request</li>
+</ul>
+<p>And return:</p>
+<ul>
+<li><code>Response</code> - The HTTP response to send</li>
+</ul>
+<h3 id="basic-handler"><a class="header" href="#basic-handler">Basic Handler</a></h3>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use rust_edge_gateway_sdk::prelude::*;
+
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    Response::ok(json!({
+        "message": "Hello!",
+        "path": req.path
+    }))
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="handler-with-error-handling"><a class="header" href="#handler-with-error-handling">Handler with Error Handling</a></h3>
+<p>For handlers that use the <code>?</code> operator, return <code>Result&lt;Response, HandlerError&gt;</code>:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
@@ -216,121 +236,104 @@ struct CreateItem {
     price: f64,
 }
 
-fn handle(req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
     // These all use ? operator - errors become HTTP responses
     let auth = req.require_header("Authorization")?;
     let item: CreateItem = req.json()?;
-    let id: i64 = req.require_path_param("id")?;
-    
+
     if item.price &lt; 0.0 {
         return Err(HandlerError::ValidationError("Price cannot be negative".into()));
     }
-    
-    Ok(Response::created(json!({"id": id, "item": item.name})))
-}
 
-handler_loop_result!(handle);
+    Ok(Response::created(json!({"name": item.name})))
+}
 <span class="boring">}</span></code></pre></pre>
-<h2 id="async-handlers"><a class="header" href="#async-handlers">Async Handlers</a></h2>
-<p>Async handlers require the <code>async</code> feature to be enabled.</p>
-<h3 id="cargotoml"><a class="header" href="#cargotoml">Cargo.toml</a></h3>
-<pre><code class="language-toml">[dependencies]
-rust-edge-gateway-sdk = { git = "https://github.com/user/rust-edge-gateway", features = ["async"] }
-tokio = { version = "1", features = ["full"] }
-</code></pre>
-<h3 id="handler_loop_async"><a class="header" href="#handler_loop_async"><code>handler_loop_async!</code></a></h3>
-<p>For async handlers that return a <code>Response</code> directly. A Tokio runtime is created automatically.</p>
+<h2 id="using-services-via-context"><a class="header" href="#using-services-via-context">Using Services via Context</a></h2>
+<p>The <code>Context</code> provides access to Service Actors:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-async fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    // Database operations
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users WHERE active = $1", &amp;[&amp;true]).await?;
+
+    // Cache operations
+    let cache = ctx.cache("redis").await?;
+    if let Some(cached) = cache.get("users:all").await? {
+        return Ok(Response::ok(cached));
+    }
+
+    // Storage operations
+    let storage = ctx.storage("s3").await?;
+    let file = storage.get("config.json").await?;
+
+    Ok(Response::ok(json!({"users": users})))
+}
+<span class="boring">}</span></code></pre></pre>
+<h2 id="async-by-default"><a class="header" href="#async-by-default">Async by Default</a></h2>
+<p>All handlers are async - the gateway runs them on a Tokio runtime:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // You can use .await directly
     let data = fetch_from_api().await;
-    Response::ok(data)
-}
 
-handler_loop_async!(handle);
+    // Concurrent operations
+    let (users, products) = tokio::join!(
+        fetch_users(),
+        fetch_products()
+    );
+
+    Response::ok(json!({"users": users, "products": products}))
+}
 <span class="boring">}</span></code></pre></pre>
-<h3 id="handler_loop_async_result"><a class="header" href="#handler_loop_async_result"><code>handler_loop_async_result!</code></a></h3>
-<p>For async handlers with Result-based error handling. Combines async support with automatic error conversion.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>use rust_edge_gateway_sdk::prelude::*;
-
-async fn handle(req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
-    let data: CreateItem = req.json()?;
-    
-    // Async database call
-    let id = database.insert(&amp;data).await
-        .map_err(|e| HandlerError::DatabaseError(e.to_string()))?;
-    
-    // Async file upload
-    let url = s3.upload(&amp;data.file).await
-        .map_err(|e| HandlerError::StorageError(e.to_string()))?;
-    
-    Ok(Response::created(json!({
-        "id": id,
-        "file_url": url
-    })))
-}
-
-handler_loop_async_result!(handle);
-<span class="boring">}</span></code></pre></pre>
-<h2 id="runtime-management"><a class="header" href="#runtime-management">Runtime Management</a></h2>
-<p><strong>Important:</strong> The async macros create a single Tokio runtime that persists across all requests. This is more efficient than creating a runtime per request.</p>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>// DON'T do this - creates runtime per request (inefficient):
-fn handle(req: Request) -&gt; Response {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        // async work
-    })
-}
-
-// DO this - runtime is created once by the macro:
-async fn handle(req: Request) -&gt; Response {
-    // async work directly
-}
-handler_loop_async!(handle);
-<span class="boring">}</span></code></pre></pre>
-<h2 id="choosing-the-right-macro"><a class="header" href="#choosing-the-right-macro">Choosing the Right Macro</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Your handler needs...</th><th>Use this macro</th></tr></thead><tbody>
-<tr><td>Simple sync logic</td><td><code>handler_loop!</code></td></tr>
-<tr><td>Sync with <code>?</code> operator</td><td><code>handler_loop_result!</code></td></tr>
-<tr><td>Async operations (DB, HTTP, files)</td><td><code>handler_loop_async!</code></td></tr>
-<tr><td>Async with <code>?</code> operator</td><td><code>handler_loop_async_result!</code></td></tr>
-</tbody></table>
-</div>
 <h2 id="example-complete-crud-handler"><a class="header" href="#example-complete-crud-handler">Example: Complete CRUD Handler</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-async fn handle(req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Result&lt;Response, HandlerError&gt; {
     match (req.method.as_str(), req.path.as_str()) {
-        ("GET", "/items") =&gt; list_items().await,
-        ("POST", "/items") =&gt; create_item(&amp;req).await,
-        ("GET", _) if req.path.starts_with("/items/") =&gt; get_item(&amp;req).await,
-        ("DELETE", _) if req.path.starts_with("/items/") =&gt; delete_item(&amp;req).await,
+        ("GET", "/items") =&gt; list_items(ctx).await,
+        ("POST", "/items") =&gt; create_item(ctx, &amp;req).await,
+        ("GET", _) if req.path.starts_with("/items/") =&gt; get_item(ctx, &amp;req).await,
+        ("DELETE", _) if req.path.starts_with("/items/") =&gt; delete_item(ctx, &amp;req).await,
         _ =&gt; Err(HandlerError::MethodNotAllowed("Use GET, POST, or DELETE".into())),
     }
 }
 
-async fn list_items() -&gt; Result&lt;Response, HandlerError&gt; {
-    let items = db::get_all_items().await
-        .map_err(|e| HandlerError::DatabaseError(e.to_string()))?;
+async fn list_items(ctx: &amp;Context) -&gt; Result&lt;Response, HandlerError&gt; {
+    let db = ctx.database("main-db").await?;
+    let items = db.query("SELECT * FROM items", &amp;[]).await?;
     Ok(Response::ok(json!({"items": items})))
 }
 
-async fn create_item(req: &amp;Request) -&gt; Result&lt;Response, HandlerError&gt; {
+async fn create_item(ctx: &amp;Context, req: &amp;Request) -&gt; Result&lt;Response, HandlerError&gt; {
     let item: NewItem = req.json()?;
-    let id = db::insert_item(&amp;item).await
-        .map_err(|e| HandlerError::DatabaseError(e.to_string()))?;
+    let db = ctx.database("main-db").await?;
+    let id = db.execute("INSERT INTO items (name) VALUES ($1) RETURNING id", &amp;[&amp;item.name]).await?;
     Ok(Response::created(json!({"id": id})))
 }
 
-handler_loop_async_result!(handle);
+async fn get_item(ctx: &amp;Context, req: &amp;Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path.strip_prefix("/items/").unwrap_or("");
+    let db = ctx.database("main-db").await?;
+    let item = db.query_one("SELECT * FROM items WHERE id = $1", &amp;[&amp;id]).await?;
+    Ok(Response::ok(item))
+}
+
+async fn delete_item(ctx: &amp;Context, req: &amp;Request) -&gt; Result&lt;Response, HandlerError&gt; {
+    let id = req.path.strip_prefix("/items/").unwrap_or("");
+    let db = ctx.database("main-db").await?;
+    db.execute("DELETE FROM items WHERE id = $1", &amp;[&amp;id]).await?;
+    Ok(Response::no_content())
+}
 <span class="boring">}</span></code></pre></pre>
 
                     </main>
@@ -341,7 +344,7 @@ handler_loop_async_result!(handle);
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../sdk/request.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../sdk/context.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -355,7 +358,7 @@ handler_loop_async_result!(handle);
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../sdk/request.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../sdk/context.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

@@ -182,14 +182,14 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="handler-lifecycle"><a class="header" href="#handler-lifecycle">Handler Lifecycle</a></h1>
-<p>Understanding how handlers are compiled, started, and managed helps you write more reliable code.</p>
+<p>Understanding how handlers are compiled, loaded, and managed helps you write more reliable code.</p>
 <h2 id="endpoint-states"><a class="header" href="#endpoint-states">Endpoint States</a></h2>
 <p>An endpoint can be in one of these states:</p>
 <div class="table-wrapper"><table><thead><tr><th>State</th><th>Description</th></tr></thead><tbody>
 <tr><td><strong>Created</strong></td><td>Endpoint defined but code not yet compiled</td></tr>
-<tr><td><strong>Compiled</strong></td><td>Code compiled successfully, ready to start</td></tr>
-<tr><td><strong>Running</strong></td><td>Worker process is active and handling requests</td></tr>
-<tr><td><strong>Stopped</strong></td><td>Worker process stopped, can be restarted</td></tr>
+<tr><td><strong>Compiled</strong></td><td>Code compiled to dynamic library, ready to load</td></tr>
+<tr><td><strong>Loaded</strong></td><td>Handler library loaded into gateway, handling requests</td></tr>
+<tr><td><strong>Draining</strong></td><td>Old handler finishing in-flight requests during update</td></tr>
 <tr><td><strong>Error</strong></td><td>Compilation or runtime error occurred</td></tr>
 </tbody></table>
 </div>
@@ -197,10 +197,10 @@
 <p>When you click "Compile", the gateway:</p>
 <ol>
 <li><strong>Creates a Cargo project</strong> in the handlers directory</li>
-<li><strong>Writes your code</strong> to <code>src/main.rs</code></li>
-<li><strong>Generates Cargo.toml</strong> with the SDK dependency</li>
+<li><strong>Writes your code</strong> to <code>src/lib.rs</code></li>
+<li><strong>Generates Cargo.toml</strong> with the SDK dependency and <code>cdylib</code> crate type</li>
 <li><strong>Runs <code>cargo build --release</code></strong> to compile</li>
-<li><strong>Stores the binary</strong> for execution</li>
+<li><strong>Produces a dynamic library</strong> (<code>.so</code>, <code>.dll</code>, or <code>.dylib</code>)</li>
 </ol>
 <h3 id="generated-project-structure"><a class="header" href="#generated-project-structure">Generated Project Structure</a></h3>
 <pre><code>handlers/
@@ -208,122 +208,122 @@
     ├── Cargo.toml
     ├── Cargo.lock
     ├── src/
-    │   └── main.rs    # Your handler code
+    │   └── lib.rs    # Your handler code
     └── target/
         └── release/
-            └── handler  # Compiled binary
+            └── libhandler_{id}.so  # Compiled library (Linux)
 </code></pre>
 <h3 id="cargotoml"><a class="header" href="#cargotoml">Cargo.toml</a></h3>
-<p>The generated Cargo.toml includes the SDK:</p>
+<p>The generated Cargo.toml includes the SDK and configures a dynamic library:</p>
 <pre><code class="language-toml">[package]
-name = "handler"
+name = "handler_{endpoint_id}"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
 rust-edge-gateway-sdk = { path = "../../crates/rust-edge-gateway-sdk" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 </code></pre>
-<p>You can request additional dependencies by using them in your code - the gateway will detect common crates like <code>chrono</code>, <code>uuid</code>, <code>regex</code>, etc.</p>
-<h2 id="worker-processes"><a class="header" href="#worker-processes">Worker Processes</a></h2>
-<h3 id="starting-a-handler"><a class="header" href="#starting-a-handler">Starting a Handler</a></h3>
-<p>When you start an endpoint:</p>
+<h2 id="handler-loading"><a class="header" href="#handler-loading">Handler Loading</a></h2>
+<h3 id="loading-a-handler"><a class="header" href="#loading-a-handler">Loading a Handler</a></h3>
+<p>When you deploy an endpoint:</p>
 <ol>
-<li>Gateway spawns the compiled binary as a child process</li>
-<li>IPC channels are established (stdin/stdout)</li>
-<li>Worker enters its request loop</li>
-<li>Status changes to "Running"</li>
+<li>Gateway loads the dynamic library using <code>libloading</code></li>
+<li>Locates the <code>handler_entry</code> symbol (function pointer)</li>
+<li>Registers the handler in the <code>HandlerRegistry</code></li>
+<li>Status changes to "Loaded"</li>
 </ol>
 <h3 id="request-flow"><a class="header" href="#request-flow">Request Flow</a></h3>
-<pre><code>┌─────────┐     ┌──────────┐     ┌────────┐
-│ Gateway │────▶│  stdin   │────▶│ Worker │
-│         │     │ (request)│     │        │
-│         │◀────│  stdout  │◀────│        │
-│         │     │(response)│     │        │
-└─────────┘     └──────────┘     └────────┘
+<pre><code>┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Request   │────▶│  HandlerRegistry │────▶│  handler_entry  │
+│             │     │  (lookup by ID)  │     │  (fn pointer)   │
+│             │◀────│                  │◀────│                 │
+└─────────────┘     └──────────────────┘     └─────────────────┘
 </code></pre>
-<p>The IPC protocol uses length-prefixed JSON:</p>
-<ul>
-<li>4 bytes: message length (big-endian u32)</li>
-<li>N bytes: JSON payload</li>
-</ul>
-<h3 id="worker-loop"><a class="header" href="#worker-loop">Worker Loop</a></h3>
-<p>Your handler runs in a loop:</p>
+<p>The handler is called directly via function pointer - no serialization or IPC overhead.</p>
+<h3 id="handler-function"><a class="header" href="#handler-function">Handler Function</a></h3>
+<p>Your handler is an async function that receives a Context and Request:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>loop {
-    // 1. Read request from stdin
-    let request = read_request()?;
-    
-    // 2. Call your handler function
-    let response = handle(request);
-    
-    // 3. Write response to stdout
-    send_response(response)?;
+</span>use rust_edge_gateway_sdk::prelude::*;
+
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // Access services via ctx
+    // Process request
+    // Return response
+    Response::ok(json!({"status": "success"}))
 }
 <span class="boring">}</span></code></pre></pre>
-<p>The loop exits when:</p>
-<ul>
-<li>stdin is closed (gateway stopped the worker)</li>
-<li>An IPC error occurs</li>
-<li>The process is killed</li>
-</ul>
-<h3 id="stopping-a-handler"><a class="header" href="#stopping-a-handler">Stopping a Handler</a></h3>
-<p>When you stop an endpoint:</p>
+<p>The <code>#[handler]</code> macro generates the <code>handler_entry</code> symbol that the gateway looks for.</p>
+<h2 id="hot-swapping-with-graceful-draining"><a class="header" href="#hot-swapping-with-graceful-draining">Hot Swapping with Graceful Draining</a></h2>
+<p>Rust Edge Gateway supports zero-downtime updates with graceful draining:</p>
+<h3 id="how-it-works"><a class="header" href="#how-it-works">How It Works</a></h3>
 <ol>
-<li>Gateway closes the stdin pipe</li>
-<li>Worker's read_request() returns an error</li>
-<li>Worker exits cleanly</li>
-<li>Gateway waits for process exit</li>
-<li>Status changes to "Stopped"</li>
+<li><strong>Compile new version</strong> - New handler library is compiled</li>
+<li><strong>Load new handler</strong> - New library is loaded into memory</li>
+<li><strong>Atomic swap</strong> - New handler starts receiving new requests</li>
+<li><strong>Drain old handler</strong> - Old handler finishes in-flight requests</li>
+<li><strong>Unload old handler</strong> - Once drained, old library is unloaded</li>
 </ol>
-<h2 id="hot-reload"><a class="header" href="#hot-reload">Hot Reload</a></h2>
-<p>Rust Edge Gateway supports hot reloading:</p>
-<ol>
-<li><strong>Edit code</strong> in the admin UI</li>
-<li><strong>Compile</strong> the new version</li>
-<li><strong>Restart</strong> the endpoint
-<ul>
-<li>Old worker finishes current request</li>
-<li>New worker starts with updated code</li>
-</ul>
-</li>
-</ol>
-<p>No gateway restart required!</p>
+<h3 id="request-tracking"><a class="header" href="#request-tracking">Request Tracking</a></h3>
+<p>Each handler tracks active requests:</p>
+<pre><code>┌─────────────────────────────────────────────────────────────┐
+│                    Handler Update Timeline                   │
+├─────────────────────────────────────────────────────────────┤
+│  Time ──────────────────────────────────────────────────▶   │
+│                                                              │
+│  Old Handler:  ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│                (handling)  (draining)  (unloaded)            │
+│                                                              │
+│  New Handler:  ░░░░░░░░░░░░████████████████████████████████  │
+│                            (handling new requests)           │
+│                                                              │
+│                     ▲                                        │
+│                     │ Swap point                             │
+└─────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3 id="drain-timeout"><a class="header" href="#drain-timeout">Drain Timeout</a></h3>
+<p>If the old handler doesn't drain within the timeout (default: 30 seconds), it is forcefully unloaded. Configure this based on your longest expected request duration.</p>
 <h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
 <h3 id="compilation-errors"><a class="header" href="#compilation-errors">Compilation Errors</a></h3>
 <p>If compilation fails:</p>
 <ul>
 <li>Error message is captured and displayed</li>
 <li>Endpoint stays in previous state</li>
-<li>Previous binary (if any) remains available</li>
+<li>Previous library (if any) remains loaded</li>
 </ul>
 <h3 id="runtime-errors"><a class="header" href="#runtime-errors">Runtime Errors</a></h3>
 <p>If your handler panics:</p>
 <ul>
-<li>Gateway detects the worker exit</li>
+<li>The panic is caught by the gateway</li>
 <li>Error is logged</li>
-<li>Worker can be restarted</li>
-<li>Endpoint moves to "Error" state</li>
+<li>Other handlers continue working</li>
+<li>The specific request returns a 500 error</li>
 </ul>
 <h3 id="graceful-error-handling"><a class="header" href="#graceful-error-handling">Graceful Error Handling</a></h3>
 <p>Always handle errors in your code:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    match process_request(&amp;req) {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    match process_request(ctx, &amp;req).await {
         Ok(data) =&gt; Response::ok(data),
         Err(e) =&gt; e.to_response(), // HandlerError -&gt; Response
     }
 }
 
-fn process_request(req: &amp;Request) -&gt; Result&lt;JsonValue, HandlerError&gt; {
+async fn process_request(ctx: &amp;Context, req: &amp;Request) -&gt; Result&lt;JsonValue, HandlerError&gt; {
     let body: MyInput = req.json()
         .map_err(|e| HandlerError::ValidationError(e.to_string()))?;
-    
+
+    // Use services via ctx
     // ... process ...
-    
+
     Ok(json!({"result": "success"}))
 }
 <span class="boring">}</span></code></pre></pre>

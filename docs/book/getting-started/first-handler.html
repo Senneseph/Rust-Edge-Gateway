@@ -182,19 +182,18 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="your-first-handler"><a class="header" href="#your-first-handler">Your First Handler</a></h1>
-<p>This guide explains the structure of a handler and how to work with requests and responses.</p>
+<p>This guide explains the structure of a handler and how to work with the Context, Request, and Response.</p>
 <h2 id="handler-structure"><a class="header" href="#handler-structure">Handler Structure</a></h2>
 <p>Every handler follows the same pattern:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
 </span>use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     // Your logic here
     Response::ok(json!({"status": "success"}))
 }
-
-handler_loop!(handle);
 <span class="boring">}</span></code></pre></pre>
 <h3 id="the-prelude"><a class="header" href="#the-prelude">The Prelude</a></h3>
 <p>The <code>prelude</code> module imports everything you typically need:</p>
@@ -203,41 +202,45 @@ handler_loop!(handle);
 </span>use rust_edge_gateway_sdk::prelude::*;
 
 // This imports:
+// - Context for service access
 // - Request, Response types
 // - serde::{Deserialize, Serialize}
 // - serde_json::{json, Value as JsonValue}
-// - read_request, send_response IPC functions
 // - HandlerError for error handling
+// - The #[handler] attribute macro
 <span class="boring">}</span></code></pre></pre>
 <h3 id="the-handler-function"><a class="header" href="#the-handler-function">The Handler Function</a></h3>
-<p>Your handler function receives a <code>Request</code> and returns a <code>Response</code>:</p>
+<p>Your handler function receives a <code>Context</code> and <code>Request</code>, and returns a <code>Response</code>:</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     // Access request data
     let method = &amp;req.method;  // "GET", "POST", etc.
     let path = &amp;req.path;      // "/users/123"
-    
+
+    // Access services via ctx (database, cache, storage)
+    // let db = ctx.database();
+
     // Return a response
     Response::ok(json!({"received": path}))
 }
 <span class="boring">}</span></code></pre></pre>
-<h3 id="the-handler-loop-macro"><a class="header" href="#the-handler-loop-macro">The Handler Loop Macro</a></h3>
-<p>The <code>handler_loop!</code> macro sets up the main function and IPC loop:</p>
-<pre><pre class="playground"><code class="language-rust">handler_loop!(handle);
+<h3 id="the-handler-attribute"><a class="header" href="#the-handler-attribute">The Handler Attribute</a></h3>
+<p>The <code>#[handler]</code> attribute macro generates the entry point for the dynamic library:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // ...
+}
 
-// This expands to:
-fn main() {
-    loop {
-        match read_request() {
-            Ok(req) =&gt; {
-                let response = handle(req);
-                send_response(response).unwrap();
-            }
-            Err(_) =&gt; break,
-        }
-    }
-}</code></pre></pre>
+// This generates:
+// #[no_mangle]
+// pub extern "C" fn handler_entry(ctx: &amp;Context, req: Request) -&gt; Pin&lt;Box&lt;dyn Future&lt;Output = Response&gt; + Send&gt;&gt; {
+//     Box::pin(handle(ctx, req))
+// }
+<span class="boring">}</span></code></pre></pre>
 <h2 id="working-with-requests"><a class="header" href="#working-with-requests">Working with Requests</a></h2>
 <h3 id="accessing-the-body"><a class="header" href="#accessing-the-body">Accessing the Body</a></h3>
 <p>For POST/PUT requests, parse the JSON body:</p>
@@ -249,13 +252,14 @@ struct CreateUser {
     email: String,
 }
 
-fn handle(req: Request) -&gt; Response {
+#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     // Parse JSON body
     let user: CreateUser = match req.json() {
         Ok(u) =&gt; u,
         Err(e) =&gt; return Response::bad_request(format!("Invalid JSON: {}", e)),
     };
-    
+
     Response::created(json!({
         "id": "new-user-id",
         "name": user.name,
@@ -267,10 +271,11 @@ fn handle(req: Request) -&gt; Response {
 <p>Extract dynamic path segments (e.g., <code>/users/{id}</code>):</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     let user_id = req.path_param("id")
         .ok_or_else(|| "Missing user ID")?;
-    
+
     Response::ok(json!({"user_id": user_id}))
 }
 <span class="boring">}</span></code></pre></pre>
@@ -278,15 +283,16 @@ fn handle(req: Request) -&gt; Response {
 <p>Access query string values (e.g., <code>?page=1&amp;limit=10</code>):</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     let page = req.query_param("page")
         .map(|s| s.parse::&lt;u32&gt;().unwrap_or(1))
         .unwrap_or(1);
-    
+
     let limit = req.query_param("limit")
         .map(|s| s.parse::&lt;u32&gt;().unwrap_or(10))
         .unwrap_or(10);
-    
+
     Response::ok(json!({
         "page": page,
         "limit": limit,
@@ -297,14 +303,15 @@ fn handle(req: Request) -&gt; Response {
 <p>Access HTTP headers (case-insensitive):</p>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
     let auth = req.header("Authorization");
     let content_type = req.header("Content-Type");
-    
+
     if auth.is_none() {
         return Response::json(401, json!({"error": "Unauthorized"}));
     }
-    
+
     Response::ok(json!({"authenticated": true}))
 }
 <span class="boring">}</span></code></pre></pre>
@@ -346,9 +353,31 @@ Response::internal_error("Something broke")  // 500
 Response::text(200, "&lt;html&gt;&lt;body&gt;Hello&lt;/body&gt;&lt;/html&gt;")
     .with_header("Content-Type", "text/html")
 <span class="boring">}</span></code></pre></pre>
+<h2 id="using-the-context"><a class="header" href="#using-the-context">Using the Context</a></h2>
+<p>The <code>Context</code> provides access to Service Actors:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[handler]
+pub async fn handle(ctx: &amp;Context, req: Request) -&gt; Response {
+    // Access database service
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users").await?;
+
+    // Access cache service
+    let cache = ctx.cache("redis").await?;
+    cache.set("key", "value", 300).await?;
+
+    // Access storage service
+    let storage = ctx.storage("s3").await?;
+    storage.put("file.txt", data).await?;
+
+    Response::ok(json!({"users": users}))
+}
+<span class="boring">}</span></code></pre></pre>
 <h2 id="next-steps"><a class="header" href="#next-steps">Next Steps</a></h2>
 <ul>
-<li><a href="./lifecycle.html">Handler Lifecycle</a> - Compilation and process management</li>
+<li><a href="./lifecycle.html">Handler Lifecycle</a> - Compilation, loading, and hot-swapping</li>
+<li><a href="../sdk/context.html">Context API</a> - Service access via Context</li>
 <li><a href="../sdk/errors.html">Error Handling</a> - Structured error handling</li>
 <li><a href="../examples/hello-world.html">Examples</a> - More code examples</li>
 </ul>

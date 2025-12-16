@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Email - Rust Edge Gateway</title>
+        <title>Handler Registry - Rust Edge Gateway</title>
 
 
         <!-- Custom HTML head -->
@@ -12,34 +12,34 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="../../favicon.svg">
-        <link rel="shortcut icon" href="../../favicon.png">
-        <link rel="stylesheet" href="../../css/variables.css">
-        <link rel="stylesheet" href="../../css/general.css">
-        <link rel="stylesheet" href="../../css/chrome.css">
-        <link rel="stylesheet" href="../../css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="../../FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="../../fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="../../highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="../../tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="../../ayu-highlight.css">
+        <link rel="stylesheet" id="highlight-css" href="../highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="../tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "../../";
+            const path_to_root = "../";
             const default_light_theme = "rust";
             const default_dark_theme = "coal";
-            window.path_to_searchindex_js = "../../searchindex.js";
+            window.path_to_searchindex_js = "../searchindex.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../../toc.js"></script>
+        <script src="../toc.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -106,7 +106,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="../../toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -141,13 +141,13 @@
                     <h1 class="menu-title">Rust Edge Gateway</h1>
 
                     <div class="right-buttons">
-                        <a href="../../print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
                         <a href="https://github.com/Senneseph/Rust-Edge-Gateway" title="Git repository" aria-label="Git repository">
                             <i id="git-repository-button" class="fa fa-github"></i>
                         </a>
-                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway/edit/master/docs/src/sdk/services/email.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                        <a href="https://github.com/Senneseph/Rust-Edge-Gateway/edit/master/docs/src/architecture/handler-registry.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
                             <i id="git-edit-button" class="fa fa-edit"></i>
                         </a>
 
@@ -181,160 +181,157 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="email-smtp-service"><a class="header" href="#email-smtp-service">Email (SMTP) Service</a></h1>
-<p>Send emails from your handlers using SMTP.</p>
-<h2 id="configuration"><a class="header" href="#configuration">Configuration</a></h2>
-<h3 id="basic-smtp-with-starttls"><a class="header" href="#basic-smtp-with-starttls">Basic SMTP with STARTTLS</a></h3>
-<pre><code class="language-json">{
-  "service_type": "email",
-  "config": {
-    "host": "smtp.example.com",
-    "port": 587,
-    "username": "sender@example.com",
-    "password": "app-password",
-    "encryption": "starttls",
-    "from_address": "noreply@example.com",
-    "from_name": "My App",
-    "reply_to": "support@example.com"
-  }
-}
-</code></pre>
-<h3 id="gmail-smtp"><a class="header" href="#gmail-smtp">Gmail SMTP</a></h3>
-<pre><code class="language-json">{
-  "service_type": "email",
-  "config": {
-    "host": "smtp.gmail.com",
-    "port": 587,
-    "username": "your-email@gmail.com",
-    "password": "your-app-password",
-    "encryption": "starttls",
-    "from_address": "your-email@gmail.com",
-    "from_name": "Your Name"
-  }
-}
-</code></pre>
-<h3 id="implicit-tls-port-465"><a class="header" href="#implicit-tls-port-465">Implicit TLS (Port 465)</a></h3>
-<pre><code class="language-json">{
-  "service_type": "email",
-  "config": {
-    "host": "smtp.example.com",
-    "port": 465,
-    "username": "sender@example.com",
-    "password": "secret",
-    "encryption": "tls",
-    "from_address": "noreply@example.com"
-  }
-}
-</code></pre>
-<h3 id="local-smtp-no-auth"><a class="header" href="#local-smtp-no-auth">Local SMTP (No Auth)</a></h3>
-<pre><code class="language-json">{
-  "service_type": "email",
-  "config": {
-    "host": "localhost",
-    "port": 25,
-    "encryption": "none",
-    "from_address": "app@localhost"
-  }
-}
-</code></pre>
-<h2 id="configuration-options"><a class="header" href="#configuration-options">Configuration Options</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>
-<tr><td><code>host</code></td><td>string</td><td>required</td><td>SMTP server hostname</td></tr>
-<tr><td><code>port</code></td><td>u16</td><td>587</td><td>SMTP port</td></tr>
-<tr><td><code>username</code></td><td>string</td><td>null</td><td>Auth username (usually email address)</td></tr>
-<tr><td><code>password</code></td><td>string</td><td>null</td><td>Auth password or app password</td></tr>
-<tr><td><code>encryption</code></td><td>string</td><td>"starttls"</td><td>Encryption: "none", "starttls", or "tls"</td></tr>
-<tr><td><code>from_address</code></td><td>string</td><td>required</td><td>Default sender email</td></tr>
-<tr><td><code>from_name</code></td><td>string</td><td>null</td><td>Default sender display name</td></tr>
-<tr><td><code>reply_to</code></td><td>string</td><td>null</td><td>Default reply-to address</td></tr>
-<tr><td><code>timeout_seconds</code></td><td>u32</td><td>30</td><td>Connection timeout</td></tr>
-<tr><td><code>max_retries</code></td><td>u32</td><td>3</td><td>Send retry attempts</td></tr>
-</tbody></table>
-</div>
-<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
-<h3 id="send-a-simple-email"><a class="header" href="#send-a-simple-email">Send a Simple Email</a></h3>
+                        <h1 id="handler-registry"><a class="header" href="#handler-registry">Handler Registry</a></h1>
+<p>The Handler Registry manages loaded handler libraries and provides hot-swapping with graceful draining.</p>
+<h2 id="overview"><a class="header" href="#overview">Overview</a></h2>
 <pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
 </span><span class="boring">fn main() {
-</span>use rust_edge_gateway_sdk::prelude::*;
-
-fn handle(req: Request) -&gt; Response {
-    let email = EmailPool { pool_id: "notifications".to_string() };
+</span>pub struct HandlerRegistry {
+    /// Map of endpoint ID to loaded handler
+    handlers: RwLock&lt;HashMap&lt;String, Arc&lt;LoadedHandler&gt;&gt;&gt;,
     
-    let result = email.send(
-        "user@example.com",
-        "Welcome!",
-        "Thanks for signing up.",
-    );
+    /// Handlers that are draining (previous versions)
+    draining_handlers: RwLock&lt;Vec&lt;Arc&lt;LoadedHandler&gt;&gt;&gt;,
     
-    match result {
-        Ok(()) =&gt; Response::ok(json!({"sent": true})),
-        Err(e) =&gt; Response::internal_error(e.to_string()),
-    }
+    /// Directory where handler libraries are stored
+    handlers_dir: PathBuf,
 }
 <span class="boring">}</span></code></pre></pre>
-<h3 id="send-html-email"><a class="header" href="#send-html-email">Send HTML Email</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>fn handle(req: Request) -&gt; Response {
-    let email = EmailPool { pool_id: "notifications".to_string() };
-    
-    let html = r#"
-        &lt;h1&gt;Welcome!&lt;/h1&gt;
-        &lt;p&gt;Thanks for joining us.&lt;/p&gt;
-        &lt;a href="https://example.com/verify"&gt;Verify your email&lt;/a&gt;
-    "#;
-    
-    let result = email.send_html(
-        "user@example.com",
-        "Welcome to Our App",
-        html,
-    );
-    
-    match result {
-        Ok(()) =&gt; Response::ok(json!({"sent": true})),
-        Err(e) =&gt; Response::internal_error(e.to_string()),
-    }
-}
-<span class="boring">}</span></code></pre></pre>
-<h3 id="send-with-custom-from"><a class="header" href="#send-with-custom-from">Send with Custom From</a></h3>
-<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
-</span><span class="boring">fn main() {
-</span>let result = email.send_from(
-    "support@example.com",  // From
-    "Support Team",         // From name
-    "user@example.com",     // To
-    "Your Ticket #123",     // Subject
-    "We've received your support request...",
-);
-<span class="boring">}</span></code></pre></pre>
-<h2 id="common-providers"><a class="header" href="#common-providers">Common Providers</a></h2>
-<div class="table-wrapper"><table><thead><tr><th>Provider</th><th>Host</th><th>Port</th><th>Encryption</th></tr></thead><tbody>
-<tr><td>Gmail</td><td>smtp.gmail.com</td><td>587</td><td>starttls</td></tr>
-<tr><td>Outlook</td><td>smtp.office365.com</td><td>587</td><td>starttls</td></tr>
-<tr><td>SendGrid</td><td>smtp.sendgrid.net</td><td>587</td><td>starttls</td></tr>
-<tr><td>Mailgun</td><td>smtp.mailgun.org</td><td>587</td><td>starttls</td></tr>
-<tr><td>Amazon SES</td><td>email-smtp.{region}.amazonaws.com</td><td>587</td><td>starttls</td></tr>
-</tbody></table>
-</div>
-<h2 id="best-practices"><a class="header" href="#best-practices">Best Practices</a></h2>
+<h2 id="loading-handlers"><a class="header" href="#loading-handlers">Loading Handlers</a></h2>
+<p>When a handler is deployed, the registry:</p>
 <ol>
-<li><strong>Use app passwords</strong> - Don't use your main account password</li>
-<li><strong>Set up SPF/DKIM</strong> - Improve deliverability</li>
-<li><strong>Handle failures</strong> - Emails can fail; log and retry</li>
-<li><strong>Rate limit</strong> - Don't spam; respect provider limits</li>
-<li><strong>Use templates</strong> - Consistent formatting</li>
-<li><strong>Test with sandbox</strong> - Use test mode before production</li>
+<li><strong>Locates the library</strong> in the handlers directory</li>
+<li><strong>Loads it with <code>libloading</code></strong> (cross-platform dynamic loading)</li>
+<li><strong>Finds the <code>handler_entry</code> symbol</strong> (function pointer)</li>
+<li><strong>Stores in the handlers map</strong> by endpoint ID</li>
 </ol>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Load a handler
+registry.load("my-endpoint").await?;
+
+// Load from specific path
+registry.load_from("my-endpoint", Path::new("/path/to/lib.so")).await?;
+<span class="boring">}</span></code></pre></pre>
+<h2 id="executing-handlers"><a class="header" href="#executing-handlers">Executing Handlers</a></h2>
+<p>The registry provides execution methods with request tracking:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Execute a handler
+let response = registry.execute("my-endpoint", &amp;ctx, request).await?;
+
+// Execute with timeout
+let response = registry.execute_with_timeout(
+    "my-endpoint",
+    &amp;ctx,
+    request,
+    Duration::from_secs(30)
+).await?;
+<span class="boring">}</span></code></pre></pre>
+<p>Request tracking ensures graceful draining works correctly.</p>
+<h2 id="hot-swapping"><a class="header" href="#hot-swapping">Hot Swapping</a></h2>
+<h3 id="immediate-swap"><a class="header" href="#immediate-swap">Immediate Swap</a></h3>
+<p>For quick updates where in-flight requests can be dropped:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>registry.swap("my-endpoint", Path::new("/path/to/new-lib.so")).await?;
+<span class="boring">}</span></code></pre></pre>
+<p>The old handler is dropped immediately.</p>
+<h3 id="graceful-swap"><a class="header" href="#graceful-swap">Graceful Swap</a></h3>
+<p>For zero-downtime updates:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let result = registry.swap_graceful(
+    "my-endpoint",
+    Path::new("/path/to/new-lib.so"),
+    Duration::from_secs(30)  // drain timeout
+).await?;
+
+println!("Swapped: {}", result.swapped);
+println!("Pending requests: {}", result.old_requests_pending);
+println!("Draining: {}", result.draining);
+<span class="boring">}</span></code></pre></pre>
+<p>The graceful swap:</p>
+<ol>
+<li>Loads the new handler</li>
+<li>Atomically swaps the active handler</li>
+<li>Marks the old handler as draining</li>
+<li>Waits for in-flight requests to complete</li>
+<li>Unloads the old handler when drained</li>
+</ol>
+<h2 id="request-tracking"><a class="header" href="#request-tracking">Request Tracking</a></h2>
+<p>Each <code>LoadedHandler</code> tracks active requests:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct LoadedHandler {
+    // ... library and entry point ...
+    
+    /// Active request count
+    active_requests: AtomicU64,
+    
+    /// Whether this handler is draining
+    draining: AtomicBool,
+}
+<span class="boring">}</span></code></pre></pre>
+<p>When executing a handler:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Acquire request guard (increments counter)
+let guard = handler.acquire_request()?;
+
+// Execute handler
+let response = handler.execute(&amp;ctx, request).await;
+
+// Guard is dropped (decrements counter)
+drop(guard);
+<span class="boring">}</span></code></pre></pre>
+<p>If the handler is draining, <code>acquire_request()</code> returns <code>None</code>.</p>
+<h2 id="draining-states"><a class="header" href="#draining-states">Draining States</a></h2>
+<p>A handler can be in one of these states:</p>
+<div class="table-wrapper"><table><thead><tr><th>State</th><th><code>draining</code></th><th><code>active_requests</code></th><th>Description</th></tr></thead><tbody>
+<tr><td>Active</td><td><code>false</code></td><td>Any</td><td>Accepting new requests</td></tr>
+<tr><td>Draining</td><td><code>true</code></td><td>&gt; 0</td><td>Finishing in-flight requests</td></tr>
+<tr><td>Drained</td><td><code>true</code></td><td>0</td><td>Ready to unload</td></tr>
+</tbody></table>
+</div>
+<h2 id="monitoring"><a class="header" href="#monitoring">Monitoring</a></h2>
+<p>Get statistics about loaded handlers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let stats = registry.stats().await;
+
+println!("Loaded handlers: {}", stats.loaded_count);
+println!("Draining handlers: {}", stats.draining_count);
+println!("Active requests: {}", stats.active_requests);
+println!("Draining requests: {}", stats.draining_requests);
+<span class="boring">}</span></code></pre></pre>
+<h2 id="cleanup"><a class="header" href="#cleanup">Cleanup</a></h2>
+<p>Periodically clean up fully drained handlers:</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let removed = registry.cleanup_drained().await;
+println!("Cleaned up {} drained handlers", removed);
+<span class="boring">}</span></code></pre></pre>
+<p>This is typically called by a background task.</p>
+<h2 id="library-naming"><a class="header" href="#library-naming">Library Naming</a></h2>
+<p>Libraries are named by platform:</p>
+<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Library Name</th></tr></thead><tbody>
+<tr><td>Linux</td><td><code>libhandler_{id}.so</code></td></tr>
+<tr><td>Windows</td><td><code>handler_{id}.dll</code></td></tr>
+<tr><td>macOS</td><td><code>libhandler_{id}.dylib</code></td></tr>
+</tbody></table>
+</div>
+<p>The registry handles this automatically based on the target platform.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../../sdk/services/ftp.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../architecture/overview.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../../architecture/overview.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../architecture/service-actors.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -344,11 +341,11 @@ fn handle(req: Request) -&gt; Response {
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../../sdk/services/ftp.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../architecture/overview.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../../architecture/overview.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../architecture/service-actors.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -362,19 +359,19 @@ fn handle(req: Request) -&gt; Response {
             window.playground_copyable = true;
         </script>
 
-        <script src="../../ace.js"></script>
-        <script src="../../mode-rust.js"></script>
-        <script src="../../editor.js"></script>
-        <script src="../../theme-dawn.js"></script>
-        <script src="../../theme-tomorrow_night.js"></script>
+        <script src="../ace.js"></script>
+        <script src="../mode-rust.js"></script>
+        <script src="../editor.js"></script>
+        <script src="../theme-dawn.js"></script>
+        <script src="../theme-tomorrow_night.js"></script>
 
-        <script src="../../elasticlunr.min.js"></script>
-        <script src="../../mark.min.js"></script>
-        <script src="../../searcher.js"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="../../clipboard.min.js"></script>
-        <script src="../../highlight.js"></script>
-        <script src="../../book.js"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
 
