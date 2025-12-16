@@ -1,35 +1,55 @@
-# Handler Macros
+# Handler Attribute
 
-The SDK provides several macros for running handler loops with different patterns.
+The SDK provides the `#[handler]` attribute macro for creating handler entry points.
 
 ## Quick Reference
 
-| Macro | Handler Signature | Use Case |
-|-------|-------------------|----------|
-| `handler_loop!` | `fn(Request) -> Response` | Simple sync handlers |
-| `handler_loop_result!` | `fn(Request) -> Result<Response, HandlerError>` | Sync with error handling |
-| `handler_loop_async!` | `async fn(Request) -> Response` | Async handlers |
-| `handler_loop_async_result!` | `async fn(Request) -> Result<Response, HandlerError>` | Async with error handling |
+| Pattern | Handler Signature | Use Case |
+|---------|-------------------|----------|
+| Basic | `async fn(&Context, Request) -> Response` | Standard handlers |
+| With Result | `async fn(&Context, Request) -> Result<Response, HandlerError>` | Error handling with `?` |
 
-## Sync Handlers
+## The Handler Attribute
 
-### `handler_loop!`
-
-For simple synchronous handlers that return a `Response` directly.
+The `#[handler]` attribute generates the dynamic library entry point:
 
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
     Response::ok(json!({"path": req.path, "method": req.method}))
 }
-
-handler_loop!(handle);
 ```
 
-### `handler_loop_result!`
+This generates a `handler_entry` symbol that the gateway loads and calls directly.
 
-For handlers that return `Result<Response, HandlerError>`. Errors are automatically converted to HTTP responses.
+## Handler Signature
+
+All handlers receive:
+- `ctx: &Context` - Access to Service Actors (database, cache, storage)
+- `req: Request` - The incoming HTTP request
+
+And return:
+- `Response` - The HTTP response to send
+
+### Basic Handler
+
+```rust
+use rust_edge_gateway_sdk::prelude::*;
+
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
+    Response::ok(json!({
+        "message": "Hello!",
+        "path": req.path
+    }))
+}
+```
+
+### Handler with Error Handling
+
+For handlers that use the `?` operator, return `Result<Response, HandlerError>`:
 
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
@@ -40,133 +60,107 @@ struct CreateItem {
     price: f64,
 }
 
-fn handle(req: Request) -> Result<Response, HandlerError> {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
     // These all use ? operator - errors become HTTP responses
     let auth = req.require_header("Authorization")?;
     let item: CreateItem = req.json()?;
-    let id: i64 = req.require_path_param("id")?;
-    
+
     if item.price < 0.0 {
         return Err(HandlerError::ValidationError("Price cannot be negative".into()));
     }
-    
-    Ok(Response::created(json!({"id": id, "item": item.name})))
+
+    Ok(Response::created(json!({"name": item.name})))
 }
-
-handler_loop_result!(handle);
 ```
 
-## Async Handlers
+## Using Services via Context
 
-Async handlers require the `async` feature to be enabled.
-
-### Cargo.toml
-
-```toml
-[dependencies]
-rust-edge-gateway-sdk = { git = "https://github.com/user/rust-edge-gateway", features = ["async"] }
-tokio = { version = "1", features = ["full"] }
-```
-
-### `handler_loop_async!`
-
-For async handlers that return a `Response` directly. A Tokio runtime is created automatically.
+The `Context` provides access to Service Actors:
 
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-async fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    // Database operations
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users WHERE active = $1", &[&true]).await?;
+
+    // Cache operations
+    let cache = ctx.cache("redis").await?;
+    if let Some(cached) = cache.get("users:all").await? {
+        return Ok(Response::ok(cached));
+    }
+
+    // Storage operations
+    let storage = ctx.storage("s3").await?;
+    let file = storage.get("config.json").await?;
+
+    Ok(Response::ok(json!({"users": users})))
+}
+```
+
+## Async by Default
+
+All handlers are async - the gateway runs them on a Tokio runtime:
+
+```rust
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
+    // You can use .await directly
     let data = fetch_from_api().await;
-    Response::ok(data)
-}
 
-handler_loop_async!(handle);
+    // Concurrent operations
+    let (users, products) = tokio::join!(
+        fetch_users(),
+        fetch_products()
+    );
+
+    Response::ok(json!({"users": users, "products": products}))
+}
 ```
-
-### `handler_loop_async_result!`
-
-For async handlers with Result-based error handling. Combines async support with automatic error conversion.
-
-```rust
-use rust_edge_gateway_sdk::prelude::*;
-
-async fn handle(req: Request) -> Result<Response, HandlerError> {
-    let data: CreateItem = req.json()?;
-    
-    // Async database call
-    let id = database.insert(&data).await
-        .map_err(|e| HandlerError::DatabaseError(e.to_string()))?;
-    
-    // Async file upload
-    let url = s3.upload(&data.file).await
-        .map_err(|e| HandlerError::StorageError(e.to_string()))?;
-    
-    Ok(Response::created(json!({
-        "id": id,
-        "file_url": url
-    })))
-}
-
-handler_loop_async_result!(handle);
-```
-
-## Runtime Management
-
-**Important:** The async macros create a single Tokio runtime that persists across all requests. This is more efficient than creating a runtime per request.
-
-```rust
-// DON'T do this - creates runtime per request (inefficient):
-fn handle(req: Request) -> Response {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        // async work
-    })
-}
-
-// DO this - runtime is created once by the macro:
-async fn handle(req: Request) -> Response {
-    // async work directly
-}
-handler_loop_async!(handle);
-```
-
-## Choosing the Right Macro
-
-| Your handler needs... | Use this macro |
-|-----------------------|----------------|
-| Simple sync logic | `handler_loop!` |
-| Sync with `?` operator | `handler_loop_result!` |
-| Async operations (DB, HTTP, files) | `handler_loop_async!` |
-| Async with `?` operator | `handler_loop_async_result!` |
 
 ## Example: Complete CRUD Handler
 
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-async fn handle(req: Request) -> Result<Response, HandlerError> {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
     match (req.method.as_str(), req.path.as_str()) {
-        ("GET", "/items") => list_items().await,
-        ("POST", "/items") => create_item(&req).await,
-        ("GET", _) if req.path.starts_with("/items/") => get_item(&req).await,
-        ("DELETE", _) if req.path.starts_with("/items/") => delete_item(&req).await,
+        ("GET", "/items") => list_items(ctx).await,
+        ("POST", "/items") => create_item(ctx, &req).await,
+        ("GET", _) if req.path.starts_with("/items/") => get_item(ctx, &req).await,
+        ("DELETE", _) if req.path.starts_with("/items/") => delete_item(ctx, &req).await,
         _ => Err(HandlerError::MethodNotAllowed("Use GET, POST, or DELETE".into())),
     }
 }
 
-async fn list_items() -> Result<Response, HandlerError> {
-    let items = db::get_all_items().await
-        .map_err(|e| HandlerError::DatabaseError(e.to_string()))?;
+async fn list_items(ctx: &Context) -> Result<Response, HandlerError> {
+    let db = ctx.database("main-db").await?;
+    let items = db.query("SELECT * FROM items", &[]).await?;
     Ok(Response::ok(json!({"items": items})))
 }
 
-async fn create_item(req: &Request) -> Result<Response, HandlerError> {
+async fn create_item(ctx: &Context, req: &Request) -> Result<Response, HandlerError> {
     let item: NewItem = req.json()?;
-    let id = db::insert_item(&item).await
-        .map_err(|e| HandlerError::DatabaseError(e.to_string()))?;
+    let db = ctx.database("main-db").await?;
+    let id = db.execute("INSERT INTO items (name) VALUES ($1) RETURNING id", &[&item.name]).await?;
     Ok(Response::created(json!({"id": id})))
 }
 
-handler_loop_async_result!(handle);
-```
+async fn get_item(ctx: &Context, req: &Request) -> Result<Response, HandlerError> {
+    let id = req.path.strip_prefix("/items/").unwrap_or("");
+    let db = ctx.database("main-db").await?;
+    let item = db.query_one("SELECT * FROM items WHERE id = $1", &[&id]).await?;
+    Ok(Response::ok(item))
+}
 
+async fn delete_item(ctx: &Context, req: &Request) -> Result<Response, HandlerError> {
+    let id = req.path.strip_prefix("/items/").unwrap_or("");
+    let db = ctx.database("main-db").await?;
+    db.execute("DELETE FROM items WHERE id = $1", &[&id]).await?;
+    Ok(Response::no_content())
+}
+```

@@ -45,27 +45,22 @@ cd examples/petstore
 
 ## Storage Abstraction
 
-The key to multi-backend support is the `Storage` type:
+The key to multi-backend support is the Context API:
 
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-fn get_storage() -> Storage {
-    // Choose one:
-    Storage::database("petstore", "pets")           // SQLite/PostgreSQL/MySQL
-    Storage::object_storage("petstore", "pets")     // MinIO/S3
-    Storage::file_storage("petstore", "pets")       // FTP/SFTP
-}
+#[handler]
+pub async fn handle(ctx: &Context, _req: Request) -> Result<Response, HandlerError> {
+    // Access storage via Context - backend is configured in Admin UI
+    let storage = ctx.storage("petstore").await?;
 
-fn handle(req: Request) -> Response {
-    let storage = get_storage();
-    
-    match storage.list(None) {
-        Ok(pets) => Response::ok(json!({"pets": pets})),
-        Err(e) => e.to_response(),
-    }
+    let pets = storage.list("pets/").await?;
+    Ok(Response::ok(json!({"pets": pets})))
 }
 ```
+
+The storage backend (database, S3, FTP) is configured in the Admin UI, not in code.
 
 ## Storage API
 

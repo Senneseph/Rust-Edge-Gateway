@@ -7,17 +7,16 @@ Robust error handling patterns for handlers.
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -> Response {
-    match process_request(&req) {
-        Ok(data) => Response::ok(data),
-        Err(e) => e.to_response(),
-    }
+#[handler]
+pub async fn handle(_ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let data = process_request(&req)?;
+    Ok(Response::ok(data))
 }
 
 fn process_request(req: &Request) -> Result<JsonValue, HandlerError> {
     let input: CreateUser = req.json()
         .map_err(|e| HandlerError::ValidationError(e.to_string()))?;
-    
+
     // Process and return result
     Ok(json!({"id": "123", "name": input.name}))
 }
@@ -26,8 +25,6 @@ fn process_request(req: &Request) -> Result<JsonValue, HandlerError> {
 struct CreateUser {
     name: String,
 }
-
-handler_loop!(handle);
 ```
 
 ## Error Types and Status Codes
@@ -81,35 +78,29 @@ fn validate_input(input: &RegisterUser) -> Result<(), HandlerError> {
             "Invalid email format".into()
         ));
     }
-    
+
     // Password validation
     if input.password.len() < 8 {
         return Err(HandlerError::ValidationError(
             "Password must be at least 8 characters".into()
         ));
     }
-    
+
     // Name validation
     if input.name.trim().is_empty() {
         return Err(HandlerError::ValidationError(
             "Name is required".into()
         ));
     }
-    
+
     Ok(())
 }
 
-fn handle(req: Request) -> Response {
-    let input: RegisterUser = match req.json() {
-        Ok(i) => i,
-        Err(e) => return Response::bad_request(format!("Invalid JSON: {}", e)),
-    };
-    
-    if let Err(e) = validate_input(&input) {
-        return e.to_response();
-    }
-    
-    Response::created(json!({"email": input.email}))
+#[handler]
+pub async fn handle(_ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let input: RegisterUser = req.json()?;
+    validate_input(&input)?;
+    Ok(Response::created(json!({"email": input.email})))
 }
 ```
 
@@ -146,11 +137,10 @@ fn process(req: &Request) -> Result<JsonValue, AppError> {
     Err(AppError::InvalidCredentials)
 }
 
-fn handle(req: Request) -> Response {
-    match process(&req) {
-        Ok(data) => Response::ok(data),
-        Err(e) => HandlerError::from(e).to_response(),
-    }
+#[handler]
+pub async fn handle(_ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let data = process(&req)?;
+    Ok(Response::ok(data))
 }
 ```
 
@@ -159,20 +149,21 @@ fn handle(req: Request) -> Response {
 Always log errors for debugging:
 
 ```rust
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(_ctx: &Context, req: Request) -> Result<Response, HandlerError> {
     match process(&req) {
-        Ok(data) => Response::ok(data),
+        Ok(data) => Ok(Response::ok(data)),
         Err(e) => {
             // Log with request ID for tracing
             eprintln!("[{}] Error: {}", req.request_id, e);
-            
+
             // Log stack trace for internal errors
             if matches!(e, HandlerError::Internal(_) | HandlerError::DatabaseError(_)) {
                 eprintln!("[{}] Request path: {}", req.request_id, req.path);
                 eprintln!("[{}] Request body: {:?}", req.request_id, req.body);
             }
-            
-            e.to_response()
+
+            Err(e)
         }
     }
 }
@@ -183,33 +174,34 @@ fn handle(req: Request) -> Response {
 Handle service failures gracefully:
 
 ```rust
-fn handle(req: Request) -> Response {
-    let redis = RedisPool { pool_id: "cache".to_string() };
-    let db = DbPool { pool_id: "main".to_string() };
-    
-    // Try cache first
-    let cached = redis.get("data:key");
-    
-    match cached {
-        Ok(Some(data)) => {
-            return Response::ok(json!({"source": "cache", "data": data}));
-        }
-        Ok(None) => { /* Cache miss, continue */ }
-        Err(e) => {
-            // Log but don't fail - Redis being down shouldn't break the app
-            eprintln!("Redis error (non-fatal): {}", e);
+#[handler]
+pub async fn handle(ctx: &Context, _req: Request) -> Result<Response, HandlerError> {
+    let cache = ctx.cache("redis").await;
+    let db = ctx.database("main").await?;
+
+    // Try cache first (non-fatal if unavailable)
+    if let Ok(cache) = cache {
+        match cache.get("data:key").await {
+            Ok(Some(data)) => {
+                return Ok(Response::ok(json!({"source": "cache", "data": data})));
+            }
+            Ok(None) => { /* Cache miss, continue */ }
+            Err(e) => {
+                // Log but don't fail - Redis being down shouldn't break the app
+                eprintln!("Redis error (non-fatal): {}", e);
+            }
         }
     }
-    
+
     // Fallback to database
-    match db.query("SELECT * FROM data", &[]) {
-        Ok(result) => Response::ok(json!({"source": "db", "data": result.rows})),
+    match db.query("SELECT * FROM data", &[]).await {
+        Ok(result) => Ok(Response::ok(json!({"source": "db", "data": result}))),
         Err(e) => {
             eprintln!("Database error: {}", e);
-            Response::json(503, json!({
+            Ok(Response::json(503, json!({
                 "error": "Service temporarily unavailable",
                 "retry_after": 5,
-            }))
+            })))
         }
     }
 }

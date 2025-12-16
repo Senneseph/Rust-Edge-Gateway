@@ -1,6 +1,6 @@
 # Handler Lifecycle
 
-Understanding how handlers are compiled, started, and managed helps you write more reliable code.
+Understanding how handlers are compiled, loaded, and managed helps you write more reliable code.
 
 ## Endpoint States
 
@@ -9,9 +9,9 @@ An endpoint can be in one of these states:
 | State | Description |
 |-------|-------------|
 | **Created** | Endpoint defined but code not yet compiled |
-| **Compiled** | Code compiled successfully, ready to start |
-| **Running** | Worker process is active and handling requests |
-| **Stopped** | Worker process stopped, can be restarted |
+| **Compiled** | Code compiled to dynamic library, ready to load |
+| **Loaded** | Handler library loaded into gateway, handling requests |
+| **Draining** | Old handler finishing in-flight requests during update |
 | **Error** | Compilation or runtime error occurred |
 
 ## Compilation
@@ -19,10 +19,10 @@ An endpoint can be in one of these states:
 When you click "Compile", the gateway:
 
 1. **Creates a Cargo project** in the handlers directory
-2. **Writes your code** to `src/main.rs`
-3. **Generates Cargo.toml** with the SDK dependency
+2. **Writes your code** to `src/lib.rs`
+3. **Generates Cargo.toml** with the SDK dependency and `cdylib` crate type
 4. **Runs `cargo build --release`** to compile
-5. **Stores the binary** for execution
+5. **Produces a dynamic library** (`.so`, `.dll`, or `.dylib`)
 
 ### Generated Project Structure
 
@@ -32,21 +32,24 @@ handlers/
     ├── Cargo.toml
     ├── Cargo.lock
     ├── src/
-    │   └── main.rs    # Your handler code
+    │   └── lib.rs    # Your handler code
     └── target/
         └── release/
-            └── handler  # Compiled binary
+            └── libhandler_{id}.so  # Compiled library (Linux)
 ```
 
 ### Cargo.toml
 
-The generated Cargo.toml includes the SDK:
+The generated Cargo.toml includes the SDK and configures a dynamic library:
 
 ```toml
 [package]
-name = "handler"
+name = "handler_{endpoint_id}"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
 
 [dependencies]
 rust-edge-gateway-sdk = { path = "../../crates/rust-edge-gateway-sdk" }
@@ -54,77 +57,83 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ```
 
-You can request additional dependencies by using them in your code - the gateway will detect common crates like `chrono`, `uuid`, `regex`, etc.
+## Handler Loading
 
-## Worker Processes
+### Loading a Handler
 
-### Starting a Handler
+When you deploy an endpoint:
 
-When you start an endpoint:
-
-1. Gateway spawns the compiled binary as a child process
-2. IPC channels are established (stdin/stdout)
-3. Worker enters its request loop
-4. Status changes to "Running"
+1. Gateway loads the dynamic library using `libloading`
+2. Locates the `handler_entry` symbol (function pointer)
+3. Registers the handler in the `HandlerRegistry`
+4. Status changes to "Loaded"
 
 ### Request Flow
 
 ```
-┌─────────┐     ┌──────────┐     ┌────────┐
-│ Gateway │────▶│  stdin   │────▶│ Worker │
-│         │     │ (request)│     │        │
-│         │◀────│  stdout  │◀────│        │
-│         │     │(response)│     │        │
-└─────────┘     └──────────┘     └────────┘
+┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Request   │────▶│  HandlerRegistry │────▶│  handler_entry  │
+│             │     │  (lookup by ID)  │     │  (fn pointer)   │
+│             │◀────│                  │◀────│                 │
+└─────────────┘     └──────────────────┘     └─────────────────┘
 ```
 
-The IPC protocol uses length-prefixed JSON:
-- 4 bytes: message length (big-endian u32)
-- N bytes: JSON payload
+The handler is called directly via function pointer - no serialization or IPC overhead.
 
-### Worker Loop
+### Handler Function
 
-Your handler runs in a loop:
+Your handler is an async function that receives a Context and Request:
 
 ```rust
-loop {
-    // 1. Read request from stdin
-    let request = read_request()?;
-    
-    // 2. Call your handler function
-    let response = handle(request);
-    
-    // 3. Write response to stdout
-    send_response(response)?;
+use rust_edge_gateway_sdk::prelude::*;
+
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
+    // Access services via ctx
+    // Process request
+    // Return response
+    Response::ok(json!({"status": "success"}))
 }
 ```
 
-The loop exits when:
-- stdin is closed (gateway stopped the worker)
-- An IPC error occurs
-- The process is killed
+The `#[handler]` macro generates the `handler_entry` symbol that the gateway looks for.
 
-### Stopping a Handler
+## Hot Swapping with Graceful Draining
 
-When you stop an endpoint:
+Rust Edge Gateway supports zero-downtime updates with graceful draining:
 
-1. Gateway closes the stdin pipe
-2. Worker's read_request() returns an error
-3. Worker exits cleanly
-4. Gateway waits for process exit
-5. Status changes to "Stopped"
+### How It Works
 
-## Hot Reload
+1. **Compile new version** - New handler library is compiled
+2. **Load new handler** - New library is loaded into memory
+3. **Atomic swap** - New handler starts receiving new requests
+4. **Drain old handler** - Old handler finishes in-flight requests
+5. **Unload old handler** - Once drained, old library is unloaded
 
-Rust Edge Gateway supports hot reloading:
+### Request Tracking
 
-1. **Edit code** in the admin UI
-2. **Compile** the new version
-3. **Restart** the endpoint
-   - Old worker finishes current request
-   - New worker starts with updated code
+Each handler tracks active requests:
 
-No gateway restart required!
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Handler Update Timeline                   │
+├─────────────────────────────────────────────────────────────┤
+│  Time ──────────────────────────────────────────────────▶   │
+│                                                              │
+│  Old Handler:  ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │
+│                (handling)  (draining)  (unloaded)            │
+│                                                              │
+│  New Handler:  ░░░░░░░░░░░░████████████████████████████████  │
+│                            (handling new requests)           │
+│                                                              │
+│                     ▲                                        │
+│                     │ Swap point                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Drain Timeout
+
+If the old handler doesn't drain within the timeout (default: 30 seconds), it is forcefully unloaded. Configure this based on your longest expected request duration.
 
 ## Error Handling
 
@@ -133,34 +142,36 @@ No gateway restart required!
 If compilation fails:
 - Error message is captured and displayed
 - Endpoint stays in previous state
-- Previous binary (if any) remains available
+- Previous library (if any) remains loaded
 
 ### Runtime Errors
 
 If your handler panics:
-- Gateway detects the worker exit
+- The panic is caught by the gateway
 - Error is logged
-- Worker can be restarted
-- Endpoint moves to "Error" state
+- Other handlers continue working
+- The specific request returns a 500 error
 
 ### Graceful Error Handling
 
 Always handle errors in your code:
 
 ```rust
-fn handle(req: Request) -> Response {
-    match process_request(&req) {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
+    match process_request(ctx, &req).await {
         Ok(data) => Response::ok(data),
         Err(e) => e.to_response(), // HandlerError -> Response
     }
 }
 
-fn process_request(req: &Request) -> Result<JsonValue, HandlerError> {
+async fn process_request(ctx: &Context, req: &Request) -> Result<JsonValue, HandlerError> {
     let body: MyInput = req.json()
         .map_err(|e| HandlerError::ValidationError(e.to_string()))?;
-    
+
+    // Use services via ctx
     // ... process ...
-    
+
     Ok(json!({"result": "success"}))
 }
 ```

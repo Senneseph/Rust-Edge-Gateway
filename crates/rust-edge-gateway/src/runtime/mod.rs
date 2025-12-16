@@ -1,9 +1,10 @@
-//! Runtime module - Actor-based service runtime and handler loading
+//! Runtime module - Actor-based service runtime and handler loading (v2)
 //!
-//! This module provides:
+//! This module provides the v2 architecture:
 //! - Context API for handlers
 //! - Actor-based services (database, cache, storage)
-//! - Dynamic library handler loading
+//! - Dynamic library handler loading with hot-swap
+//! - Graceful handler draining for zero-downtime deployments
 //! - Service lifecycle management
 //! - Bundle deployment system
 
@@ -15,6 +16,6 @@ pub mod bundle;
 
 pub use context::Context;
 pub use services::Services;
-pub use handler::{HandlerRegistry, LoadedHandler};
+pub use handler::{HandlerRegistry, LoadedHandler, DrainResult, HandlerStats, RequestGuard};
 pub use actor::{ActorHandle, ActorCommand};
 pub use bundle::{BundleManifest, BundleDeployer, DeploymentResult};

@@ -1,6 +1,13 @@
-//! Worker process management
+//! Worker process management (DEPRECATED - v1 architecture)
 //!
-//! Manages the lifecycle of handler worker processes.
+//! **DEPRECATED**: This module implements the v1 subprocess-based handler architecture.
+//! New code should use the v2 `runtime::handler::HandlerRegistry` which provides:
+//! - Dynamic library loading (no subprocess overhead)
+//! - Graceful draining for zero-downtime deployments
+//! - Better performance through direct function calls
+//!
+//! This module is kept for backwards compatibility but will be removed in a future version.
+//! See `crates/rust-edge-gateway/src/runtime/handler.rs` for the v2 implementation.
 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -12,6 +19,9 @@ use crate::api::Endpoint;
 use crate::config::AppConfig;
 
 /// Represents a running worker process
+///
+/// **DEPRECATED**: Use `runtime::handler::LoadedHandler` instead.
+#[deprecated(since = "0.2.0", note = "Use runtime::handler::LoadedHandler for v2 architecture")]
 pub struct Worker {
     pub endpoint_id: String,
     pub process: Child,
@@ -60,6 +70,13 @@ impl Worker {
 }
 
 /// Manages all worker processes
+///
+/// **DEPRECATED**: Use `runtime::handler::HandlerRegistry` instead.
+/// The v2 HandlerRegistry provides:
+/// - Dynamic library loading instead of subprocess management
+/// - Graceful draining for zero-downtime hot-swapping
+/// - Request tracking for observability
+#[deprecated(since = "0.2.0", note = "Use runtime::handler::HandlerRegistry for v2 architecture")]
 pub struct WorkerManager {
     workers: HashMap<String, Worker>,
     config: AppConfig,

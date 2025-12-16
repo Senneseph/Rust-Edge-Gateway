@@ -1,22 +1,24 @@
 # Services
 
-Rust Edge Gateway can connect your handlers to backend services like databases, Redis, and object storage.
+Rust Edge Gateway connects your handlers to backend services via Service Actors. Services are accessed through the Context API using an actor-based message-passing architecture.
 
 ## Overview
 
-Services are configured in the gateway admin UI and made available to handlers. Your handler code uses typed service handles to interact with backends.
+Services are:
+1. **Configured** in the Admin UI or via API
+2. **Started as actors** when the gateway launches
+3. **Accessed via Context** in your handler code
+4. **Thread-safe** through message-passing
 
 ## Available Service Types
 
 | Service | Description | Use Cases |
 |---------|-------------|-----------|
-| **SQLite** | Embedded SQL database | Local data, caching, simple apps |
 | **PostgreSQL** | Advanced relational database | Complex queries, transactions |
 | **MySQL** | Popular relational database | Web applications, compatibility |
+| **SQLite** | Embedded SQL database | Local data, caching, simple apps |
 | **Redis** | In-memory data store | Caching, sessions, pub/sub |
-| **MongoDB** | Document database | Flexible schemas, JSON data |
-| **MinIO** | S3-compatible object storage | File uploads, media storage |
-| **Memcached** | Distributed caching | High-speed key-value caching |
+| **MinIO/S3** | Object storage | File uploads, media storage |
 | **FTP/SFTP** | File transfer protocols | File uploads, vendor integrations |
 | **Email** | SMTP email sending | Notifications, alerts, reports |
 
@@ -28,7 +30,7 @@ Services are configured in the gateway admin UI and made available to handlers. 
 2. Click **Create Service**
 3. Select service type and configure connection
 4. Test the connection
-5. Bind to endpoints
+5. Save the service
 
 ### Via API
 
@@ -36,119 +38,123 @@ Services are configured in the gateway admin UI and made available to handlers. 
 curl -X POST http://localhost:9081/api/services \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Main Database",
+    "name": "main-db",
     "service_type": "postgres",
     "config": {
       "host": "db.example.com",
       "port": 5432,
       "database": "myapp",
       "username": "app_user",
-      "password": "secret"
+      "password": "secret",
+      "pool_size": 10
     }
   }'
 ```
 
 ## Using Services in Handlers
 
-Services are accessed through typed handles in your handler code.
+Services are accessed through the Context:
 
 ### Database Example
 
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -> Response {
-    let db = DbPool { pool_id: "main-db".to_string() };
-    
-    // Query
-    let result = db.query(
-        "SELECT id, name FROM users WHERE active = ?",
-        &["true"]
-    );
-    
-    match result {
-        Ok(data) => Response::ok(json!({"users": data.rows})),
-        Err(e) => Response::internal_error(e.to_string()),
-    }
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let db = ctx.database("main-db").await?;
+
+    // Query with parameters
+    let users = db.query(
+        "SELECT id, name FROM users WHERE active = $1",
+        &[&true]
+    ).await?;
+
+    Ok(Response::ok(json!({"users": users})))
 }
 ```
 
-### Redis Example
+### Cache Example
 
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -> Response {
-    let redis = RedisPool { pool_id: "cache".to_string() };
-    
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let cache = ctx.cache("redis").await?;
+
     // Try cache first
-    if let Ok(Some(cached)) = redis.get("user:123") {
-        return Response::ok(json!({"source": "cache", "data": cached}));
+    if let Some(cached) = cache.get("user:123").await? {
+        return Ok(Response::ok(json!({"source": "cache", "data": cached})));
     }
-    
-    // Cache miss - fetch and store
-    let data = fetch_from_db();
-    let _ = redis.setex("user:123", &data, 300); // Cache for 5 minutes
-    
-    Response::ok(json!({"source": "db", "data": data}))
+
+    // Cache miss - fetch from database
+    let db = ctx.database("main-db").await?;
+    let user = db.query_one("SELECT * FROM users WHERE id = $1", &[&123]).await?;
+
+    // Store in cache (TTL in seconds)
+    cache.set("user:123", &user, 300).await?;
+
+    Ok(Response::ok(json!({"source": "db", "data": user})))
 }
 ```
 
-## Service Handles
-
-### DbPool
-
-For SQL databases (PostgreSQL, MySQL, SQLite):
+### Storage Example
 
 ```rust
-pub struct DbPool {
-    pub pool_id: String,
-}
+use rust_edge_gateway_sdk::prelude::*;
 
-impl DbPool {
-    /// Execute a query, returns rows
-    fn query(&self, sql: &str, params: &[&str]) -> Result<DbResult, HandlerError>;
-    
-    /// Execute a statement (INSERT, UPDATE, DELETE)
-    fn execute(&self, sql: &str, params: &[&str]) -> Result<u64, HandlerError>;
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let storage = ctx.storage("s3").await?;
+
+    // Upload file
+    let data = req.body_bytes();
+    storage.put("uploads/file.txt", data).await?;
+
+    // Get presigned URL for client download
+    let url = storage.presigned_url("uploads/file.txt", 3600).await?;
+
+    Ok(Response::ok(json!({"download_url": url})))
 }
 ```
 
-### RedisPool
+## Actor-Based Architecture
 
-For Redis:
+Services use the actor pattern for thread-safety:
+
+```
+┌──────────┐     ┌─────────────┐     ┌──────────────┐
+│ Handler  │────▶│   Channel   │────▶│ Service Actor│
+│          │     │  (command)  │     │              │
+│          │◀────│  (response) │◀────│  (owns pool) │
+└──────────┘     └─────────────┘     └──────────────┘
+```
+
+Benefits:
+- **Thread-safe** - No shared mutable state
+- **Isolated** - Actor failures don't crash handlers
+- **Efficient** - Connection pools are reused
+- **Backpressure** - Channel buffers prevent overload
+
+## Service Names
+
+Services are identified by name in your handler code:
 
 ```rust
-pub struct RedisPool {
-    pub pool_id: String,
-}
-
-impl RedisPool {
-    /// Get a value
-    fn get(&self, key: &str) -> Result<Option<String>, HandlerError>;
-    
-    /// Set a value
-    fn set(&self, key: &str, value: &str) -> Result<(), HandlerError>;
-    
-    /// Set with expiration (seconds)
-    fn setex(&self, key: &str, value: &str, seconds: u64) -> Result<(), HandlerError>;
-}
+// These names come from your service configuration
+let main_db = ctx.database("main-db").await?;
+let read_replica = ctx.database("read-replica").await?;
+let session_cache = ctx.cache("sessions").await?;
+let file_storage = ctx.storage("uploads").await?;
 ```
 
-## Binding Services to Endpoints
-
-Services must be bound to endpoints before they can be used:
-
-1. Create the service in the admin UI
-2. Open the endpoint configuration
-3. Add the service binding with a pool ID
-4. The pool ID is used in your handler code
-
-This allows the same endpoint code to use different service instances in different environments (dev, staging, prod).
+This allows the same handler code to use different service instances in different environments.
 
 ## Next Steps
 
+- [Context API](./context.md) - Full Context reference
 - [Database Service Details](./services/database.md)
-- [Redis Service Details](./services/redis.md)
-- [FTP/SFTP Service Details](./services/ftp.md)
-- [Email Service Details](./services/email.md)
+- [Cache (Redis) Details](./services/redis.md)
+- [Storage Details](./services/storage.md)
+- [Architecture: Service Actors](../architecture/service-actors.md)

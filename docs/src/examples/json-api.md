@@ -20,39 +20,36 @@ struct Item {
     name: String,
     description: Option<String>,
     price: f64,
-    created_at: String,
 }
 
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(_ctx: &Context, req: Request) -> Response {
     // Parse request body
     let input: CreateItem = match req.json() {
         Ok(data) => data,
         Err(e) => return Response::bad_request(format!("Invalid JSON: {}", e)),
     };
-    
+
     // Validate
     if input.name.is_empty() {
         return Response::bad_request("Name is required");
     }
-    
+
     if input.price < 0.0 {
         return Response::bad_request("Price must be non-negative");
     }
-    
-    // Create item (in real app, save to database)
+
+    // Create item (in real app, save to database via ctx)
     let item = Item {
         id: uuid::Uuid::new_v4().to_string(),
         name: input.name,
         description: input.description,
         price: input.price,
-        created_at: chrono::Utc::now().to_rfc3339(),
     };
-    
+
     // Return 201 Created
     Response::created(item)
 }
-
-handler_loop!(handle);
 ```
 
 ## Endpoint Configuration
@@ -85,44 +82,35 @@ curl -X POST http://localhost:9080/items \
 
 ## Full CRUD Example
 
-For a complete CRUD API, create multiple endpoints:
+For a complete CRUD API with database access:
 
 ### GET /items - List Items
 
 ```rust
-fn handle(_req: Request) -> Response {
-    // In real app, fetch from database
-    let items = vec![
-        json!({"id": "1", "name": "Item 1"}),
-        json!({"id": "2", "name": "Item 2"}),
-    ];
-    
-    Response::ok(json!({
+#[handler]
+pub async fn handle(ctx: &Context, _req: Request) -> Result<Response, HandlerError> {
+    let db = ctx.database("main-db").await?;
+    let items = db.query("SELECT id, name FROM items", &[]).await?;
+
+    Ok(Response::ok(json!({
         "items": items,
         "count": items.len(),
-    }))
+    })))
 }
 ```
 
 ### GET /items/{id} - Get Item
 
 ```rust
-fn handle(req: Request) -> Response {
-    let id = match req.path_param("id") {
-        Some(id) => id,
-        None => return Response::bad_request("Missing ID"),
-    };
-    
-    // In real app, fetch from database
-    if id == "1" {
-        Response::ok(json!({
-            "id": "1",
-            "name": "Item 1",
-            "price": 9.99,
-        }))
-    } else {
-        Response::not_found()
-    }
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let id = req.path_param("id")
+        .ok_or_else(|| HandlerError::ValidationError("Missing ID".into()))?;
+
+    let db = ctx.database("main-db").await?;
+    let item = db.query_one("SELECT * FROM items WHERE id = $1", &[&id]).await?;
+
+    Ok(Response::ok(item))
 }
 ```
 
@@ -135,39 +123,34 @@ struct UpdateItem {
     price: Option<f64>,
 }
 
-fn handle(req: Request) -> Response {
-    let id = match req.path_param("id") {
-        Some(id) => id.clone(),
-        None => return Response::bad_request("Missing ID"),
-    };
-    
-    let update: UpdateItem = match req.json() {
-        Ok(data) => data,
-        Err(e) => return Response::bad_request(format!("Invalid JSON: {}", e)),
-    };
-    
-    // In real app, update in database
-    Response::ok(json!({
-        "id": id,
-        "name": update.name.unwrap_or("Unchanged".to_string()),
-        "updated": true,
-    }))
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let id = req.path_param("id")
+        .ok_or_else(|| HandlerError::ValidationError("Missing ID".into()))?;
+
+    let update: UpdateItem = req.json()?;
+
+    let db = ctx.database("main-db").await?;
+    db.execute(
+        "UPDATE items SET name = COALESCE($1, name), price = COALESCE($2, price) WHERE id = $3",
+        &[&update.name, &update.price, &id]
+    ).await?;
+
+    Ok(Response::ok(json!({"id": id, "updated": true})))
 }
 ```
 
 ### DELETE /items/{id} - Delete Item
 
 ```rust
-fn handle(req: Request) -> Response {
-    let id = match req.path_param("id") {
-        Some(id) => id,
-        None => return Response::bad_request("Missing ID"),
-    };
-    
-    // In real app, delete from database
-    eprintln!("Deleted item: {}", id);
-    
-    Response::no_content()
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let id = req.path_param("id")
+        .ok_or_else(|| HandlerError::ValidationError("Missing ID".into()))?;
+
+    let db = ctx.database("main-db").await?;
+    db.execute("DELETE FROM items WHERE id = $1", &[&id]).await?;
+
+    Ok(Response::no_content())
 }
 ```
-

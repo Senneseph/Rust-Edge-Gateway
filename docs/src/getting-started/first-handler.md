@@ -1,6 +1,6 @@
 # Your First Handler
 
-This guide explains the structure of a handler and how to work with requests and responses.
+This guide explains the structure of a handler and how to work with the Context, Request, and Response.
 
 ## Handler Structure
 
@@ -9,12 +9,11 @@ Every handler follows the same pattern:
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
     // Your logic here
     Response::ok(json!({"status": "success"}))
 }
-
-handler_loop!(handle);
 ```
 
 ### The Prelude
@@ -25,47 +24,48 @@ The `prelude` module imports everything you typically need:
 use rust_edge_gateway_sdk::prelude::*;
 
 // This imports:
+// - Context for service access
 // - Request, Response types
 // - serde::{Deserialize, Serialize}
 // - serde_json::{json, Value as JsonValue}
-// - read_request, send_response IPC functions
 // - HandlerError for error handling
+// - The #[handler] attribute macro
 ```
 
 ### The Handler Function
 
-Your handler function receives a `Request` and returns a `Response`:
+Your handler function receives a `Context` and `Request`, and returns a `Response`:
 
 ```rust
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
     // Access request data
     let method = &req.method;  // "GET", "POST", etc.
     let path = &req.path;      // "/users/123"
-    
+
+    // Access services via ctx (database, cache, storage)
+    // let db = ctx.database();
+
     // Return a response
     Response::ok(json!({"received": path}))
 }
 ```
 
-### The Handler Loop Macro
+### The Handler Attribute
 
-The `handler_loop!` macro sets up the main function and IPC loop:
+The `#[handler]` attribute macro generates the entry point for the dynamic library:
 
 ```rust
-handler_loop!(handle);
-
-// This expands to:
-fn main() {
-    loop {
-        match read_request() {
-            Ok(req) => {
-                let response = handle(req);
-                send_response(response).unwrap();
-            }
-            Err(_) => break,
-        }
-    }
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
+    // ...
 }
+
+// This generates:
+// #[no_mangle]
+// pub extern "C" fn handler_entry(ctx: &Context, req: Request) -> Pin<Box<dyn Future<Output = Response> + Send>> {
+//     Box::pin(handle(ctx, req))
+// }
 ```
 
 ## Working with Requests
@@ -81,13 +81,14 @@ struct CreateUser {
     email: String,
 }
 
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
     // Parse JSON body
     let user: CreateUser = match req.json() {
         Ok(u) => u,
         Err(e) => return Response::bad_request(format!("Invalid JSON: {}", e)),
     };
-    
+
     Response::created(json!({
         "id": "new-user-id",
         "name": user.name,
@@ -101,10 +102,11 @@ fn handle(req: Request) -> Response {
 Extract dynamic path segments (e.g., `/users/{id}`):
 
 ```rust
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
     let user_id = req.path_param("id")
         .ok_or_else(|| "Missing user ID")?;
-    
+
     Response::ok(json!({"user_id": user_id}))
 }
 ```
@@ -114,15 +116,16 @@ fn handle(req: Request) -> Response {
 Access query string values (e.g., `?page=1&limit=10`):
 
 ```rust
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
     let page = req.query_param("page")
         .map(|s| s.parse::<u32>().unwrap_or(1))
         .unwrap_or(1);
-    
+
     let limit = req.query_param("limit")
         .map(|s| s.parse::<u32>().unwrap_or(10))
         .unwrap_or(10);
-    
+
     Response::ok(json!({
         "page": page,
         "limit": limit,
@@ -135,14 +138,15 @@ fn handle(req: Request) -> Response {
 Access HTTP headers (case-insensitive):
 
 ```rust
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
     let auth = req.header("Authorization");
     let content_type = req.header("Content-Type");
-    
+
     if auth.is_none() {
         return Response::json(401, json!({"error": "Unauthorized"}));
     }
-    
+
     Response::ok(json!({"authenticated": true}))
 }
 ```
@@ -194,9 +198,33 @@ Response::text(200, "<html><body>Hello</body></html>")
     .with_header("Content-Type", "text/html")
 ```
 
+## Using the Context
+
+The `Context` provides access to Service Actors:
+
+```rust
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
+    // Access database service
+    let db = ctx.database("main-db").await?;
+    let users = db.query("SELECT * FROM users").await?;
+
+    // Access cache service
+    let cache = ctx.cache("redis").await?;
+    cache.set("key", "value", 300).await?;
+
+    // Access storage service
+    let storage = ctx.storage("s3").await?;
+    storage.put("file.txt", data).await?;
+
+    Response::ok(json!({"users": users}))
+}
+```
+
 ## Next Steps
 
-- [Handler Lifecycle](./lifecycle.md) - Compilation and process management
+- [Handler Lifecycle](./lifecycle.md) - Compilation, loading, and hot-swapping
+- [Context API](../sdk/context.md) - Service access via Context
 - [Error Handling](../sdk/errors.md) - Structured error handling
 - [Examples](../examples/hello-world.md) - More code examples
 

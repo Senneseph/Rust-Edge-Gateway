@@ -1,4 +1,6 @@
-//! Gateway router - routes HTTP requests to worker processes
+//! Gateway router - routes HTTP requests to handler libraries (v2 architecture)
+//!
+//! Uses dynamic library loading with graceful draining for zero-downtime deployments.
 
 use axum::{
     body::Body,
@@ -21,7 +23,7 @@ pub fn create_gateway_router(_state: Arc<AppState>) -> Router<Arc<AppState>> {
         .route("/", any(handle_gateway_request))
 }
 
-/// Handle an incoming gateway request
+/// Handle an incoming gateway request using v2 handler registry
 async fn handle_gateway_request(
     State(state): State<Arc<AppState>>,
     request: Request<Body>,
@@ -36,7 +38,7 @@ async fn handle_gateway_request(
         .and_then(|h| h.to_str().ok())
         .unwrap_or("localhost");
     let domain = host.split(':').next().unwrap_or(host);
-    
+
     tracing::debug!(
         request_id = %request_id,
         domain = %domain,
@@ -44,7 +46,7 @@ async fn handle_gateway_request(
         path = %path,
         "Incoming request"
     );
-    
+
     // Find the endpoint for this request (with path parameter extraction)
     let (endpoint, path_params) = match state.db.find_endpoint(domain, &path, &method) {
         Ok(Some((e, params))) => (e, params),
@@ -57,12 +59,12 @@ async fn handle_gateway_request(
             return (StatusCode::INTERNAL_SERVER_ERROR, "Internal Error").into_response();
         }
     };
-    
+
     // Check if endpoint is compiled
     if !endpoint.compiled {
         return (StatusCode::SERVICE_UNAVAILABLE, "Endpoint not compiled").into_response();
     }
-    
+
     // Build the SDK request
     let query: std::collections::HashMap<String, String> = request.uri()
         .query()
@@ -72,12 +74,12 @@ async fn handle_gateway_request(
                 .collect()
         })
         .unwrap_or_default();
-    
+
     let headers: std::collections::HashMap<String, String> = request.headers()
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
         .collect();
-    
+
     // Get body
     let body_bytes = match axum::body::to_bytes(request.into_body(), 1024 * 1024).await {
         Ok(b) => b,
@@ -86,13 +88,13 @@ async fn handle_gateway_request(
             return (StatusCode::BAD_REQUEST, "Failed to read body").into_response();
         }
     };
-    
+
     let body = if body_bytes.is_empty() {
         None
     } else {
         Some(String::from_utf8_lossy(&body_bytes).to_string())
     };
-    
+
     let sdk_request = rust_edge_gateway_sdk::Request {
         method: method.clone(),
         path: path.clone(),
@@ -103,30 +105,42 @@ async fn handle_gateway_request(
         client_ip: None, // TODO: extract from X-Forwarded-For
         request_id: request_id.clone(),
     };
-    
-    // Send to worker
+
+    // Execute via v2 handler registry with timeout and graceful draining support
     let timeout = Duration::from_secs(state.config.handler_timeout_secs);
-    let response = {
-        let mut workers = state.workers.write().await;
-        workers.handle_request(&endpoint.id, &sdk_request, timeout)
-    };
-    
+    let ctx = state.create_context();
+
+    let response = state.handler_registry.execute_with_timeout(
+        &endpoint.id,
+        &ctx,
+        sdk_request,
+        timeout,
+    ).await;
+
     match response {
         Ok(sdk_response) => {
             let mut builder = Response::builder()
                 .status(StatusCode::from_u16(sdk_response.status).unwrap_or(StatusCode::OK));
-            
+
             for (key, value) in sdk_response.headers {
                 builder = builder.header(&key, &value);
             }
-            
+
             match builder.body(Body::from(sdk_response.body.unwrap_or_default())) {
                 Ok(response) => response,
                 Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response(),
             }
         }
         Err(e) => {
-            tracing::error!(request_id = %request_id, "Worker error: {}", e);
+            let error_msg = e.to_string();
+
+            // Check if handler is draining (return 503 for graceful handling)
+            if error_msg.contains("draining") {
+                tracing::info!(request_id = %request_id, "Handler is draining, returning 503");
+                return (StatusCode::SERVICE_UNAVAILABLE, "Handler updating, please retry").into_response();
+            }
+
+            tracing::error!(request_id = %request_id, "Handler error: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, format!("Handler error: {}", e)).into_response()
         }
     }

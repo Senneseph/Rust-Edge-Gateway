@@ -7,13 +7,12 @@ The simplest possible handler.
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(_req: Request) -> Response {
+#[handler]
+pub async fn handle(_ctx: &Context, _req: Request) -> Response {
     Response::ok(json!({
         "message": "Hello, World!"
     }))
 }
-
-handler_loop!(handle);
 ```
 
 ## Endpoint Configuration
@@ -43,7 +42,8 @@ curl http://localhost:9080/hello
 ### With Request Info
 
 ```rust
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(_ctx: &Context, req: Request) -> Response {
     Response::ok(json!({
         "message": "Hello, World!",
         "method": req.method,
@@ -56,7 +56,8 @@ fn handle(req: Request) -> Response {
 ### Plain Text
 
 ```rust
-fn handle(_req: Request) -> Response {
+#[handler]
+pub async fn handle(_ctx: &Context, _req: Request) -> Response {
     Response::text(200, "Hello, World!")
 }
 ```
@@ -64,7 +65,8 @@ fn handle(_req: Request) -> Response {
 ### HTML
 
 ```rust
-fn handle(_req: Request) -> Response {
+#[handler]
+pub async fn handle(_ctx: &Context, _req: Request) -> Response {
     Response::new(200)
         .with_header("Content-Type", "text/html")
         .with_body("<h1>Hello, World!</h1>")

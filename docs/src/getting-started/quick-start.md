@@ -35,16 +35,14 @@ In the code editor, replace the default code with:
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-fn handle(req: Request) -> Response {
+#[handler]
+pub async fn handle(ctx: &Context, req: Request) -> Response {
     Response::ok(json!({
         "message": "Hello from Rust Edge Gateway!",
         "path": req.path,
         "method": req.method,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
     }))
 }
-
-handler_loop!(handle);
 ```
 
 ## Step 4: Compile
@@ -52,7 +50,7 @@ handler_loop!(handle);
 Click the **"Compile"** button. The gateway will:
 
 1. Generate a Cargo project with your code
-2. Compile it to a native binary
+2. Compile it to a dynamic library (`.so`/`.dll`)
 3. Report success or any compilation errors
 
 You should see a success message like:
@@ -60,9 +58,11 @@ You should see a success message like:
 ✓ Compiled successfully in 2.3s
 ```
 
-## Step 5: Start the Endpoint
+## Step 5: Deploy the Endpoint
 
-Click **"Start"** to activate the endpoint. The status should change to **Running**.
+Click **"Deploy"** to load the handler. The status should change to **Loaded**.
+
+The handler is now active and receiving requests - no separate "start" step needed!
 
 ## Step 6: Test Your Endpoint
 
@@ -78,15 +78,15 @@ You should receive:
 {
   "message": "Hello from Rust Edge Gateway!",
   "path": "/hello",
-  "method": "GET",
-  "timestamp": "2024-01-15T10:30:00.000Z"
+  "method": "GET"
 }
 ```
 
 ## What's Next?
 
 - [Your First Handler](./first-handler.md) - Deeper dive into handler structure
-- [Handler Lifecycle](./lifecycle.md) - Understand compilation and execution
+- [Handler Lifecycle](./lifecycle.md) - Understand compilation, loading, and hot-swapping
+- [Context API](../sdk/context.md) - Access services via the Context
 - [Request API](../sdk/request.md) - Access headers, body, parameters
 - [Response API](../sdk/response.md) - Build JSON, text, and custom responses
 - [Examples](../examples/hello-world.md) - More code examples
@@ -99,18 +99,19 @@ Check the error message for:
 - Missing dependencies (add to your handler's `use` statements)
 - Syntax errors (Rust compiler messages are helpful!)
 - Type mismatches
+- Missing `#[handler]` attribute
 
 ### Endpoint Not Responding
 
-1. Check the endpoint is in **Running** status
+1. Check the endpoint is in **Loaded** status
 2. Verify the path matches exactly (paths are case-sensitive)
 3. Check the method matches your request
 4. View endpoint logs in the admin UI
 
-### Handler Crashes
+### Handler Errors
 
 View the logs to see panic messages or error output. Common causes:
 - Unwrapping `None` or `Err` values
-- Stack overflow from deep recursion
 - Accessing invalid JSON fields
+- Service actor communication errors
 

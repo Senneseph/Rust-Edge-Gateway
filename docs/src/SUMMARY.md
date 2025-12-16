@@ -10,16 +10,24 @@
 
 # SDK Reference
 
-- [Handler Macros](./sdk/handlers.md)
+- [Handler Attribute](./sdk/handlers.md)
+- [Context API](./sdk/context.md)
 - [Request](./sdk/request.md)
 - [Response](./sdk/response.md)
 - [Error Handling](./sdk/errors.md)
 - [Services](./sdk/services.md)
   - [Storage Abstraction](./sdk/services/storage.md)
   - [Database](./sdk/services/database.md)
-  - [Redis](./sdk/services/redis.md)
+  - [Cache (Redis)](./sdk/services/redis.md)
   - [FTP/SFTP](./sdk/services/ftp.md)
   - [Email](./sdk/services/email.md)
+
+# Architecture
+
+- [Overview](./architecture/overview.md)
+- [Handler Registry](./architecture/handler-registry.md)
+- [Service Actors](./architecture/service-actors.md)
+- [Graceful Draining](./architecture/graceful-draining.md)
 
 # Examples
 
