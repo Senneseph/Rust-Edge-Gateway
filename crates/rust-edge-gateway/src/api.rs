@@ -716,6 +716,100 @@ pub async fn delete_service(
 }
 
 // ============================================================================
+// Service Actor Activation
+// ============================================================================
+
+#[derive(Debug, Serialize)]
+pub struct ServiceActivateResponse {
+    pub id: String,
+    pub name: String,
+    pub service_type: ServiceType,
+    pub active: bool,
+    pub message: String,
+}
+
+/// Activate a service (start the Service Actor)
+///
+/// This spawns the service actor and makes it available to handlers via Context.
+pub async fn activate_service(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<ServiceActivateResponse>>, StatusCode> {
+    // Get the service configuration from database
+    let service = match state.db.get_service(&id) {
+        Ok(Some(s)) => s,
+        Ok(None) => return Ok(Json(ApiResponse::err("Service not found"))),
+        Err(e) => return Ok(Json(ApiResponse::err(e.to_string()))),
+    };
+
+    if !service.enabled {
+        return Ok(Json(ApiResponse::err("Service is disabled")));
+    }
+
+    // Activate based on service type
+    match service.service_type {
+        ServiceType::Minio => {
+            // Parse MinIO config
+            let minio_config: crate::runtime::services::MinioConfig =
+                match serde_json::from_value(service.config.clone()) {
+                    Ok(c) => c,
+                    Err(e) => return Ok(Json(ApiResponse::err(format!("Invalid MinIO config: {}", e)))),
+                };
+
+            // Spawn the MinIO service actor
+            match crate::runtime::services::MinioServiceActor::spawn(minio_config).await {
+                Ok(handle) => {
+                    // Update runtime services
+                    state.update_services(|services| {
+                        services.minio = Some(handle);
+                    }).await;
+
+                    Ok(Json(ApiResponse::ok(ServiceActivateResponse {
+                        id: service.id,
+                        name: service.name,
+                        service_type: service.service_type,
+                        active: true,
+                        message: "MinIO service actor started successfully".to_string(),
+                    })))
+                }
+                Err(e) => Ok(Json(ApiResponse::err(format!("Failed to start MinIO actor: {}", e)))),
+            }
+        }
+        _ => Ok(Json(ApiResponse::err(format!("Service type '{}' activation not yet implemented", service.service_type)))),
+    }
+}
+
+/// Deactivate a service (stop the Service Actor)
+pub async fn deactivate_service(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<ServiceActivateResponse>>, StatusCode> {
+    // Get the service from database
+    let service = match state.db.get_service(&id) {
+        Ok(Some(s)) => s,
+        Ok(None) => return Ok(Json(ApiResponse::err("Service not found"))),
+        Err(e) => return Ok(Json(ApiResponse::err(e.to_string()))),
+    };
+
+    match service.service_type {
+        ServiceType::Minio => {
+            state.update_services(|services| {
+                services.minio = None;  // Drop the handle, actor will stop
+            }).await;
+
+            Ok(Json(ApiResponse::ok(ServiceActivateResponse {
+                id: service.id,
+                name: service.name,
+                service_type: service.service_type,
+                active: false,
+                message: "MinIO service actor stopped".to_string(),
+            })))
+        }
+        _ => Ok(Json(ApiResponse::err(format!("Service type '{}' deactivation not yet implemented", service.service_type)))),
+    }
+}
+
+// ============================================================================
 // OpenAPI Import
 // ============================================================================
 

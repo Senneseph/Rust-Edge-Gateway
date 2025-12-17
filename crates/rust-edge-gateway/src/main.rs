@@ -17,6 +17,7 @@ mod openapi;
 mod bundle;
 mod services;
 mod runtime;  // New: Actor-based runtime
+mod handlers; // Built-in handlers for services
 
 use anyhow::Result;
 use axum::{
@@ -47,19 +48,29 @@ pub struct AppState {
     pub config: AppConfig,
     pub db: Database,
     pub workers: RwLock<WorkerManager>,
-    
+
     // New v2 runtime components
-    pub runtime_services: RuntimeServices,
+    pub runtime_services: RwLock<RuntimeServices>,
     pub handler_registry: HandlerRegistry,
     pub runtime_config: Arc<RuntimeConfig>,
 }
 
 impl AppState {
     /// Create a Context for a request
-    pub fn create_context(&self) -> Context {
-        ContextBuilder::new(self.runtime_services.clone())
+    pub async fn create_context(&self) -> Context {
+        let services = self.runtime_services.read().await.clone();
+        ContextBuilder::new(services)
             .config(self.runtime_config.clone())
             .build()
+    }
+
+    /// Update runtime services (e.g., when activating a new service actor)
+    pub async fn update_services<F>(&self, f: F)
+    where
+        F: FnOnce(&mut RuntimeServices),
+    {
+        let mut services = self.runtime_services.write().await;
+        f(&mut services);
     }
 }
 
@@ -102,7 +113,7 @@ async fn main() -> Result<()> {
         config: config.clone(),
         db,
         workers: RwLock::new(workers),
-        runtime_services,
+        runtime_services: RwLock::new(runtime_services),
         handler_registry,
         runtime_config,
     });
@@ -129,6 +140,8 @@ async fn main() -> Result<()> {
         .route("/services/{id}", put(api::update_service))
         .route("/services/{id}", delete(api::delete_service))
         .route("/services/{id}/test", post(api::test_service))
+        .route("/services/{id}/activate", post(api::activate_service))
+        .route("/services/{id}/deactivate", post(api::deactivate_service))
         // Endpoints
         .route("/endpoints", get(api::list_endpoints))
         .route("/endpoints", post(api::create_endpoint))
@@ -145,7 +158,12 @@ async fn main() -> Result<()> {
         .route("/import/bundle", post(api::import_bundle))
         // System
         .route("/health", get(api::health_check))
-        .route("/stats", get(api::get_stats));
+        .route("/stats", get(api::get_stats))
+        // MinIO built-in handlers
+        .route("/minio/objects", get(handlers::minio::list_objects))
+        .route("/minio/objects", post(handlers::minio::upload_object))
+        .route("/minio/objects/{*key}", get(handlers::minio::get_object))
+        .route("/minio/objects/{*key}", delete(handlers::minio::delete_object));
 
     // Build admin router (serves static files + API)
     let admin_router = Router::new()

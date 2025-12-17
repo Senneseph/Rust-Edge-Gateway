@@ -30,34 +30,36 @@ pub mod ipc;
 pub mod error;
 pub mod sqlite;
 pub mod handler;
+pub mod context;
 
 pub mod prelude {
     //! Common imports for Rust Edge Gateway handlers
     //!
     //! This module re-exports everything you need to write handlers:
     //! - Request and Response types
-    //! - Service clients
+    //! - Context for service access
+    //! - Service client traits
     //! - Handler macros
     //! - Error types
     //! - Serialization helpers
-    
+
     pub use crate::request::Request;
     pub use crate::response::Response;
-    pub use crate::services::*;
+    pub use crate::context::Context;
+    pub use crate::services::{MinioClient, SqliteClient, ObjectInfo, ServiceError, ServiceResult};
     pub use crate::storage::{Storage, StorageType};
-    pub use crate::sqlite::SqliteClient;
     pub use crate::ipc::{read_request, send_response};
     pub use crate::error::HandlerError;
     pub use crate::handler::{BoxFuture, HandlerFn, HandlerContext};
     pub use serde::{Deserialize, Serialize};
     pub use serde_json::{json, Value as JsonValue};
-    
+
     // Re-export v2 handler macros (new style)
     pub use crate::{handler, handler_result};
-    
+
     // V1 handler macros are already exported from ipc module
     pub use crate::{handler_loop, handler_loop_result};
-    
+
     #[cfg(feature = "async")]
     pub use crate::{handler_loop_async, handler_loop_async_result};
 }
@@ -67,6 +69,7 @@ pub use request::Request;
 pub use response::Response;
 pub use error::HandlerError;
 pub use storage::Storage;
-pub use sqlite::SqliteClient;
+pub use context::Context;
+pub use services::{MinioClient, SqliteClient, ObjectInfo, ServiceError};
 pub use handler::{BoxFuture, HandlerFn};
 

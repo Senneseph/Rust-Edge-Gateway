@@ -2,19 +2,97 @@
 //!
 //! These types represent the services that can be injected into handlers.
 //! The actual implementations are provided by the Rust Edge Gateway runtime.
+//!
+//! Handlers use trait objects (dyn MinioClient, dyn SqliteClient) which
+//! are implemented by the gateway's service actors.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
+
+/// Result type for async service operations
+pub type ServiceResult<T> = Result<T, ServiceError>;
+
+/// Future type for async service operations
+pub type ServiceFuture<'a, T> = Pin<Box<dyn Future<Output = ServiceResult<T>> + Send + 'a>>;
+
+/// Service error type
+#[derive(Debug, Clone)]
+pub enum ServiceError {
+    /// Service not available
+    NotAvailable(String),
+    /// Operation failed
+    OperationFailed(String),
+    /// Connection error
+    ConnectionError(String),
+    /// Timeout
+    Timeout,
+}
+
+impl std::fmt::Display for ServiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ServiceError::NotAvailable(s) => write!(f, "Service not available: {}", s),
+            ServiceError::OperationFailed(s) => write!(f, "Operation failed: {}", s),
+            ServiceError::ConnectionError(s) => write!(f, "Connection error: {}", s),
+            ServiceError::Timeout => write!(f, "Operation timed out"),
+        }
+    }
+}
+
+impl std::error::Error for ServiceError {}
+
+/// Object metadata for MinIO/S3 objects
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ObjectInfo {
+    pub key: String,
+    pub size: u64,
+    pub last_modified: String,
+    pub etag: Option<String>,
+    pub content_type: Option<String>,
+}
+
+/// MinIO/S3 client trait
+///
+/// Handlers receive a reference to this trait and call methods on it.
+/// The gateway provides the actual implementation that communicates
+/// with the MinIO service actor via message passing.
+pub trait MinioClient: Send + Sync {
+    /// Get an object's contents
+    fn get_object<'a>(&'a self, bucket: &'a str, key: &'a str) -> ServiceFuture<'a, Vec<u8>>;
+
+    /// Put an object
+    fn put_object<'a>(&'a self, bucket: &'a str, key: &'a str, data: Vec<u8>, content_type: Option<&'a str>) -> ServiceFuture<'a, ()>;
+
+    /// Delete an object
+    fn delete_object<'a>(&'a self, bucket: &'a str, key: &'a str) -> ServiceFuture<'a, ()>;
+
+    /// List objects with prefix
+    fn list_objects<'a>(&'a self, bucket: &'a str, prefix: &'a str) -> ServiceFuture<'a, Vec<ObjectInfo>>;
+
+    /// Get the default bucket name
+    fn default_bucket(&self) -> &str;
+}
+
+/// SQLite client trait
+pub trait SqliteClient: Send + Sync {
+    /// Execute a query and return results
+    fn query<'a>(&'a self, sql: &'a str, params: Vec<String>) -> ServiceFuture<'a, Vec<HashMap<String, serde_json::Value>>>;
+
+    /// Execute a statement (INSERT, UPDATE, DELETE)
+    fn execute<'a>(&'a self, sql: &'a str, params: Vec<String>) -> ServiceFuture<'a, u64>;
+}
 
 /// Configuration for connecting to services
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceConfig {
     /// Service type (e.g., "postgres", "redis", "kafka")
     pub service_type: String,
-    
+
     /// Connection string or configuration
     pub connection: String,
-    
+
     /// Additional options
     #[serde(default)]
     pub options: HashMap<String, String>,

@@ -36,8 +36,8 @@ pub struct LoadedHandler {
     /// The loaded library (must stay alive while handler is in use)
     _library: Library,
 
-    /// The handler entry point
-    entry: HandlerFn,
+    /// The handler entry point (pub(crate) for use in execute_with_timeout)
+    pub(crate) entry: HandlerFn,
 
     /// Path the library was loaded from
     pub path: PathBuf,
@@ -423,7 +423,7 @@ impl HandlerRegistry {
         let _guard = handler.acquire_request()
             .ok_or_else(|| anyhow!("Handler is draining, cannot accept new requests"))?;
 
-        Ok(handler.execute(ctx, req).await)
+        Ok(handler.execute(ctx, req))
     }
 
     /// Execute a handler with timeout and request tracking
@@ -441,8 +441,18 @@ impl HandlerRegistry {
         let _guard = handler.acquire_request()
             .ok_or_else(|| anyhow!("Handler is draining, cannot accept new requests"))?;
 
-        match tokio::time::timeout(timeout, handler.execute(ctx, req)).await {
-            Ok(response) => Ok(response),
+        // Get the entry function pointer (Copy/Send safe)
+        let entry = handler.entry;
+
+        // Wrap sync execution in spawn_blocking for timeout support
+        let future = tokio::task::spawn_blocking(move || {
+            // Safety: entry is from a loaded library that remains alive
+            unsafe { entry(req) }
+        });
+
+        match tokio::time::timeout(timeout, future).await {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(e)) => Err(anyhow!("Handler task panicked: {}", e)),
             Err(_) => Err(anyhow!("Handler execution timed out")),
         }
     }

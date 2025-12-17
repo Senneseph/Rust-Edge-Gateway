@@ -108,7 +108,7 @@ async fn handle_gateway_request(
 
     // Execute via v2 handler registry with timeout and graceful draining support
     let timeout = Duration::from_secs(state.config.handler_timeout_secs);
-    let ctx = state.create_context();
+    let ctx = state.create_context().await;
 
     let response = state.handler_registry.execute_with_timeout(
         &endpoint.id,

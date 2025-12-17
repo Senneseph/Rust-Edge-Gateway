@@ -4,33 +4,40 @@
 //! - Database (generic SQL interface)
 //! - Cache (Redis-like key-value)
 //! - Storage (S3-compatible object storage)
+//! - MinIO (S3-compatible, message-passing actor)
 //! - Email (SMTP)
 
 pub mod database;
 pub mod cache;
 pub mod storage;
+pub mod minio_actor;
+pub mod minio_bridge;
 
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 pub use database::{Database, DatabaseConfig, DatabaseCommand};
 pub use cache::{Cache, CacheConfig, CacheCommand};
 pub use storage::{ObjectStore, StorageConfig, StorageCommand};
+pub use minio_actor::{MinioHandle, MinioConfig, MinioServiceActor, ObjectInfo};
+pub use minio_bridge::MinioClientBridge;
 
 /// Container for all available services
-/// 
+///
 /// This is passed to handlers via Context and provides access to
 /// pre-established, long-lived service connections.
 #[derive(Clone, Default)]
 pub struct Services {
     /// Database service (MySQL, PostgreSQL, SQLite)
     pub db: Option<Database>,
-    
+
     /// Cache service (Redis, Memcached)
     pub cache: Option<Cache>,
-    
-    /// Object storage service (MinIO, S3)
+
+    /// Object storage service (MinIO, S3) - legacy
     pub storage: Option<ObjectStore>,
+
+    /// MinIO service actor (new message-passing interface)
+    pub minio: Option<MinioHandle>,
 }
 
 impl Services {
@@ -73,6 +80,18 @@ impl Services {
     pub fn require_storage(&self) -> Result<&ObjectStore, ServiceError> {
         self.storage.as_ref()
             .ok_or(ServiceError::NotConfigured("storage"))
+    }
+
+    /// Builder pattern: add minio service actor
+    pub fn with_minio(mut self, minio: MinioHandle) -> Self {
+        self.minio = Some(minio);
+        self
+    }
+
+    /// Get minio or return error
+    pub fn require_minio(&self) -> Result<&MinioHandle, ServiceError> {
+        self.minio.as_ref()
+            .ok_or(ServiceError::NotConfigured("minio"))
     }
 }
 
