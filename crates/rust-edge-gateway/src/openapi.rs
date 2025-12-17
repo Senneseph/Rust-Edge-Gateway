@@ -120,6 +120,7 @@ pub fn create_endpoints_from_import(
             method: parsed.method.clone(),
             description: parsed.description.clone(),
             code: Some(generate_default_handler(&parsed.name)),
+            dependencies: None,
             compiled: false,
             enabled: true,
             created_at: None,

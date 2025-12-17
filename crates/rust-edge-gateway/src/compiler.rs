@@ -24,6 +24,7 @@ crate-type = ["cdylib"]
 rust-edge-gateway-sdk = { path = "{sdk_path}" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+{extra_dependencies}
 
 [profile.release]
 opt-level = "z"
@@ -31,6 +32,69 @@ lto = true
 codegen-units = 1
 strip = true
 "#;
+
+/// Convert JSON dependencies to TOML format
+///
+/// Accepts dependencies in Cargo.toml JSON format:
+/// - Simple: `{"regex": "1.10"}` -> `regex = "1.10"`
+/// - Complex: `{"chrono": {"version": "0.4", "features": ["serde"]}}` -> `chrono = { version = "0.4", features = ["serde"] }`
+fn json_deps_to_toml(deps: &serde_json::Value) -> String {
+    let Some(obj) = deps.as_object() else {
+        return String::new();
+    };
+
+    let mut lines = Vec::new();
+
+    for (name, value) in obj {
+        let toml_value = match value {
+            // Simple version string: "1.10" -> "1.10"
+            serde_json::Value::String(version) => {
+                format!("{} = \"{}\"", name, version)
+            }
+            // Complex object: {"version": "0.4", "features": ["serde"]}
+            serde_json::Value::Object(spec) => {
+                let mut parts = Vec::new();
+
+                // version
+                if let Some(serde_json::Value::String(v)) = spec.get("version") {
+                    parts.push(format!("version = \"{}\"", v));
+                }
+
+                // features
+                if let Some(serde_json::Value::Array(features)) = spec.get("features") {
+                    let features_str: Vec<String> = features
+                        .iter()
+                        .filter_map(|f| f.as_str().map(|s| format!("\"{}\"", s)))
+                        .collect();
+                    if !features_str.is_empty() {
+                        parts.push(format!("features = [{}]", features_str.join(", ")));
+                    }
+                }
+
+                // optional
+                if let Some(serde_json::Value::Bool(opt)) = spec.get("optional") {
+                    if *opt {
+                        parts.push("optional = true".to_string());
+                    }
+                }
+
+                // default-features
+                if let Some(serde_json::Value::Bool(df)) = spec.get("default-features") {
+                    if !*df {
+                        parts.push("default-features = false".to_string());
+                    }
+                }
+
+                format!("{} = {{ {} }}", name, parts.join(", "))
+            }
+            _ => continue,
+        };
+
+        lines.push(toml_value);
+    }
+
+    lines.join("\n")
+}
 
 /// Template for handler lib.rs wrapper (v2 - dynamic library entry point)
 ///
@@ -67,18 +131,35 @@ pub extern "C" fn handler_entry<Ctx: HandlerContext>(
 "#;
 
 /// Compile a handler from source code
-pub async fn compile_handler(config: &AppConfig, id: &str, code: &str) -> Result<String> {
+///
+/// # Arguments
+/// * `config` - Application configuration
+/// * `id` - Handler ID (used for directory and package naming)
+/// * `code` - Handler source code
+/// * `dependencies` - Optional JSON dependencies to include in Cargo.toml
+pub async fn compile_handler(
+    config: &AppConfig,
+    id: &str,
+    code: &str,
+    dependencies: Option<&serde_json::Value>,
+) -> Result<String> {
     let handlers_dir = config.handlers_dir.clone();
     let id = id.to_string();
     let code = code.to_string();
-    
+    let deps = dependencies.cloned();
+
     // Run compilation in a blocking task
     task::spawn_blocking(move || {
-        compile_handler_sync(&handlers_dir, &id, &code)
+        compile_handler_sync(&handlers_dir, &id, &code, deps.as_ref())
     }).await?
 }
 
-fn compile_handler_sync(handlers_dir: &PathBuf, id: &str, code: &str) -> Result<String> {
+fn compile_handler_sync(
+    handlers_dir: &PathBuf,
+    id: &str,
+    code: &str,
+    dependencies: Option<&serde_json::Value>,
+) -> Result<String> {
     // Create handler directory structure
     let handler_dir = handlers_dir.join(id);
     let src_dir = handler_dir.join("src");
@@ -91,10 +172,16 @@ fn compile_handler_sync(handlers_dir: &PathBuf, id: &str, code: &str) -> Result<
     // Package name must start with a letter, so prefix with "handler_"
     let package_name = format!("handler_{}", id.replace('-', "_"));
 
+    // Convert JSON dependencies to TOML format
+    let extra_deps = dependencies
+        .map(json_deps_to_toml)
+        .unwrap_or_default();
+
     // Write Cargo.toml
     let cargo_toml = CARGO_TOML_TEMPLATE
         .replace("{name}", &package_name)
-        .replace("{sdk_path}", sdk_path);
+        .replace("{sdk_path}", sdk_path)
+        .replace("{extra_dependencies}", &extra_deps);
     std::fs::write(handler_dir.join("Cargo.toml"), cargo_toml)?;
 
     // Write lib.rs wrapper (v2 dynamic library entry point)

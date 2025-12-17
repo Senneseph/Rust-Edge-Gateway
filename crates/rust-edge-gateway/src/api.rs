@@ -176,6 +176,10 @@ pub struct Endpoint {
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
+    /// Custom Cargo dependencies for this handler.
+    /// Format mirrors Cargo.toml: {"regex": "1.10", "chrono": {"version": "0.4", "features": ["serde"]}}
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dependencies: Option<serde_json::Value>,
     pub compiled: bool,
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -195,6 +199,9 @@ pub struct CreateEndpointRequest {
     pub method: String,
     pub description: Option<String>,
     pub code: Option<String>,
+    /// Custom Cargo dependencies for this handler.
+    /// Format mirrors Cargo.toml: {"regex": "1.10", "chrono": {"version": "0.4", "features": ["serde"]}}
+    pub dependencies: Option<serde_json::Value>,
 }
 
 fn default_method() -> String {
@@ -211,6 +218,9 @@ pub struct UpdateEndpointRequest {
     pub method: Option<String>,
     pub description: Option<String>,
     pub enabled: Option<bool>,
+    /// Custom Cargo dependencies for this handler.
+    /// Format mirrors Cargo.toml: {"regex": "1.10", "chrono": {"version": "0.4", "features": ["serde"]}}
+    pub dependencies: Option<serde_json::Value>,
 }
 
 /// Code update request
@@ -284,6 +294,7 @@ pub async fn create_endpoint(
         method: req.method.to_uppercase(),
         description: req.description,
         code: req.code,
+        dependencies: req.dependencies,
         compiled: false,
         enabled: false,
         created_at: None,
@@ -332,6 +343,7 @@ pub async fn update_endpoint(
         method: req.method.map(|m| m.to_uppercase()).unwrap_or(existing.method),
         description: req.description.or(existing.description),
         code: existing.code,
+        dependencies: req.dependencies.or(existing.dependencies),
         compiled: existing.compiled,
         enabled: req.enabled.unwrap_or(existing.enabled),
         created_at: existing.created_at,
@@ -399,7 +411,7 @@ pub async fn compile_endpoint(
     };
 
     // Compile the handler
-    match crate::compiler::compile_handler(&state.config, &id, &code).await {
+    match crate::compiler::compile_handler(&state.config, &id, &code, endpoint.dependencies.as_ref()).await {
         Ok(binary_path) => {
             state.db.mark_compiled(&id, true).ok();
             Ok(Json(ApiResponse::ok(format!("Compiled to {}", binary_path))))
@@ -1038,6 +1050,11 @@ pub async fn import_bundle(
             response.handlers_matched += 1;
         }
 
+        // Apply bundle-level dependencies to endpoint
+        if bundle.dependencies.is_some() {
+            endpoint.dependencies = bundle.dependencies.clone();
+        }
+
         // Save endpoint
         if let Err(e) = state.db.create_endpoint(&endpoint) {
             response.errors.push(format!("Failed to create endpoint '{}': {}", endpoint.name, e));
@@ -1071,7 +1088,7 @@ pub async fn import_bundle(
     if query.compile {
         for endpoint in &response.endpoints {
             if let Some(ref code) = endpoint.code {
-                match crate::compiler::compile_handler(&state.config, &endpoint.id, code).await {
+                match crate::compiler::compile_handler(&state.config, &endpoint.id, code, endpoint.dependencies.as_ref()).await {
                     Ok(_) => {
                         state.db.mark_compiled(&endpoint.id, true).ok();
                         response.compiled += 1;

@@ -3,6 +3,7 @@
 //! Bundle structure:
 //! ```
 //! bundle.zip
+//! ├── bundle.yaml (optional manifest with dependencies)
 //! ├── openapi.yaml (or openapi.json, api.yaml, api.json, spec.yaml, spec.json)
 //! └── handlers/
 //!     ├── get_pet.rs         # Matches operationId "get_pet" or "getPet"
@@ -11,11 +12,27 @@
 //! ```
 //!
 //! Handler files can also be at the root level or in a `src/` directory.
+//!
+//! The bundle.yaml manifest can include dependencies that will be applied to all handlers:
+//! ```yaml
+//! bundle:
+//!   name: my-api
+//!   version: 1.0.0
+//!
+//! dependencies:
+//!   regex: "1.10"
+//!   chrono:
+//!     version: "0.4"
+//!     features:
+//!       - serde
+//! ```
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
 use zip::ZipArchive;
+
+use crate::runtime::bundle::manifest::BundleManifest;
 
 /// Parsed bundle contents
 #[derive(Debug)]
@@ -24,6 +41,10 @@ pub struct ParsedBundle {
     pub openapi_spec: Option<String>,
     /// Handler code mapped by normalized operation ID
     pub handlers: HashMap<String, String>,
+    /// Manifest (from bundle.yaml if present)
+    pub manifest: Option<BundleManifest>,
+    /// Custom Cargo dependencies from manifest
+    pub dependencies: Option<serde_json::Value>,
 }
 
 /// Possible OpenAPI file names (in priority order)
@@ -42,7 +63,15 @@ const OPENAPI_FILENAMES: &[&str] = &[
     "swagger.json",
 ];
 
-/// Parse a zip bundle and extract OpenAPI spec and handlers
+/// Possible manifest file names
+const MANIFEST_FILENAMES: &[&str] = &[
+    "bundle.yaml",
+    "bundle.yml",
+    "manifest.yaml",
+    "manifest.yml",
+];
+
+/// Parse a zip bundle and extract OpenAPI spec, handlers, and manifest
 pub fn parse_bundle(zip_bytes: &[u8]) -> Result<ParsedBundle> {
     let cursor = Cursor::new(zip_bytes);
     let mut archive = ZipArchive::new(cursor)
@@ -50,10 +79,11 @@ pub fn parse_bundle(zip_bytes: &[u8]) -> Result<ParsedBundle> {
 
     let mut openapi_spec = None;
     let mut handlers = HashMap::new();
+    let mut manifest: Option<BundleManifest> = None;
 
     tracing::debug!("Parsing bundle with {} files", archive.len());
 
-    // First pass: find OpenAPI spec
+    // First pass: find OpenAPI spec and manifest
     for i in 0..archive.len() {
         let mut file = archive.by_index(i)?;
         let raw_name = file.name().to_string();
@@ -69,6 +99,21 @@ pub fn parse_bundle(zip_bytes: &[u8]) -> Result<ParsedBundle> {
             file.read_to_string(&mut content)?;
             openapi_spec = Some(content);
             tracing::debug!("Found OpenAPI spec: {}", filename);
+        }
+
+        // Check if this is a manifest file
+        if MANIFEST_FILENAMES.contains(&filename) && manifest.is_none() {
+            let mut content = String::new();
+            file.read_to_string(&mut content)?;
+            match BundleManifest::parse(&content) {
+                Ok(m) => {
+                    tracing::debug!("Found manifest: {}", filename);
+                    manifest = Some(m);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse manifest {}: {}", filename, e);
+                }
+            }
         }
     }
 
@@ -103,11 +148,21 @@ pub fn parse_bundle(zip_bytes: &[u8]) -> Result<ParsedBundle> {
         handlers.insert(normalized, content);
     }
 
-    tracing::debug!("Parsed bundle: openapi={}, handlers={:?}", openapi_spec.is_some(), handlers.keys().collect::<Vec<_>>());
+    // Extract dependencies from manifest
+    let dependencies = manifest.as_ref().and_then(|m| m.dependencies.clone());
+
+    tracing::debug!("Parsed bundle: openapi={}, handlers={:?}, manifest={}, deps={}",
+        openapi_spec.is_some(),
+        handlers.keys().collect::<Vec<_>>(),
+        manifest.is_some(),
+        dependencies.is_some()
+    );
 
     Ok(ParsedBundle {
         openapi_spec,
         handlers,
+        manifest,
+        dependencies,
     })
 }
 

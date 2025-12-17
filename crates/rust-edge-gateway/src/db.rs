@@ -106,12 +106,17 @@ impl Database {
                 method TEXT NOT NULL DEFAULT 'GET',
                 description TEXT,
                 code TEXT,
+                dependencies TEXT,
                 compiled INTEGER NOT NULL DEFAULT 0,
                 enabled INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE SET NULL
             );
+
+            -- Migration: Add dependencies column if it doesn't exist
+            -- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we handle this via pragma
+            PRAGMA table_info(endpoints);
 
             CREATE INDEX IF NOT EXISTS idx_endpoints_domain_path
                 ON endpoints(domain, path, method);
@@ -157,6 +162,17 @@ impl Database {
                 ON request_logs(endpoint_id, created_at);
         "#)?;
 
+        // Migration: Add dependencies column to existing endpoints table if needed
+        // We check if the column exists first
+        let has_dependencies: bool = conn
+            .prepare("SELECT dependencies FROM endpoints LIMIT 1")
+            .is_ok();
+
+        if !has_dependencies {
+            conn.execute("ALTER TABLE endpoints ADD COLUMN dependencies TEXT", [])?;
+            tracing::info!("Migration: Added 'dependencies' column to endpoints table");
+        }
+
         Ok(())
     }
     
@@ -164,11 +180,12 @@ impl Database {
     pub fn list_endpoints(&self) -> Result<Vec<Endpoint>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, collection_id, name, domain, path, method, description, compiled, enabled, created_at, updated_at
+            "SELECT id, collection_id, name, domain, path, method, description, dependencies, compiled, enabled, created_at, updated_at
              FROM endpoints ORDER BY created_at DESC"
         )?;
 
         let endpoints = stmt.query_map([], |row| {
+            let deps_str: Option<String> = row.get(7)?;
             Ok(Endpoint {
                 id: row.get(0)?,
                 collection_id: row.get(1)?,
@@ -178,10 +195,11 @@ impl Database {
                 method: row.get(5)?,
                 description: row.get(6)?,
                 code: None,
-                compiled: row.get(7)?,
-                enabled: row.get(8)?,
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                dependencies: deps_str.and_then(|s| serde_json::from_str(&s).ok()),
+                compiled: row.get(8)?,
+                enabled: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         })?.collect::<Result<Vec<_>, _>>()?;
 
@@ -192,11 +210,12 @@ impl Database {
     pub fn get_endpoint(&self, id: &str) -> Result<Option<Endpoint>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, collection_id, name, domain, path, method, description, code, compiled, enabled, created_at, updated_at
+            "SELECT id, collection_id, name, domain, path, method, description, code, dependencies, compiled, enabled, created_at, updated_at
              FROM endpoints WHERE id = ?"
         )?;
 
         let endpoint = stmt.query_row([id], |row| {
+            let deps_str: Option<String> = row.get(8)?;
             Ok(Endpoint {
                 id: row.get(0)?,
                 collection_id: row.get(1)?,
@@ -206,10 +225,11 @@ impl Database {
                 method: row.get(5)?,
                 description: row.get(6)?,
                 code: row.get(7)?,
-                compiled: row.get(8)?,
-                enabled: row.get(9)?,
-                created_at: row.get(10)?,
-                updated_at: row.get(11)?,
+                dependencies: deps_str.and_then(|s| serde_json::from_str(&s).ok()),
+                compiled: row.get(9)?,
+                enabled: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
             })
         }).optional()?;
 
@@ -219,9 +239,10 @@ impl Database {
     /// Create a new endpoint
     pub fn create_endpoint(&self, endpoint: &Endpoint) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        let deps_str = endpoint.dependencies.as_ref().map(|d| serde_json::to_string(d).unwrap_or_default());
         conn.execute(
-            "INSERT INTO endpoints (id, collection_id, name, domain, path, method, description, code, compiled, enabled)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO endpoints (id, collection_id, name, domain, path, method, description, code, dependencies, compiled, enabled)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 endpoint.id,
                 endpoint.collection_id,
@@ -231,19 +252,21 @@ impl Database {
                 endpoint.method,
                 endpoint.description,
                 endpoint.code,
+                deps_str,
                 endpoint.compiled,
                 endpoint.enabled,
             ],
         )?;
         Ok(())
     }
-    
+
     /// Update an endpoint
     pub fn update_endpoint(&self, endpoint: &Endpoint) -> Result<()> {
         let conn = self.conn.lock().unwrap();
+        let deps_str = endpoint.dependencies.as_ref().map(|d| serde_json::to_string(d).unwrap_or_default());
         conn.execute(
             "UPDATE endpoints SET collection_id = ?, name = ?, domain = ?, path = ?, method = ?,
-             description = ?, compiled = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
+             description = ?, dependencies = ?, compiled = ?, enabled = ?, updated_at = CURRENT_TIMESTAMP
              WHERE id = ?",
             params![
                 endpoint.collection_id,
@@ -252,6 +275,7 @@ impl Database {
                 endpoint.path,
                 endpoint.method,
                 endpoint.description,
+                deps_str,
                 endpoint.compiled,
                 endpoint.enabled,
                 endpoint.id,
@@ -293,11 +317,12 @@ impl Database {
     pub fn find_endpoint(&self, domain: &str, path: &str, method: &str) -> Result<Option<(Endpoint, std::collections::HashMap<String, String>)>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, collection_id, name, domain, path, method, description, code, compiled, enabled, created_at, updated_at
+            "SELECT id, collection_id, name, domain, path, method, description, code, dependencies, compiled, enabled, created_at, updated_at
              FROM endpoints WHERE domain = ? AND method = ? AND enabled = 1"
         )?;
 
         let endpoints: Vec<Endpoint> = stmt.query_map(params![domain, method], |row| {
+            let deps_str: Option<String> = row.get(8)?;
             Ok(Endpoint {
                 id: row.get(0)?,
                 collection_id: row.get(1)?,
@@ -307,10 +332,11 @@ impl Database {
                 method: row.get(5)?,
                 description: row.get(6)?,
                 code: row.get(7)?,
-                compiled: row.get(8)?,
-                enabled: row.get(9)?,
-                created_at: row.get(10)?,
-                updated_at: row.get(11)?,
+                dependencies: deps_str.and_then(|s| serde_json::from_str(&s).ok()),
+                compiled: row.get(9)?,
+                enabled: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
             })
         })?.filter_map(|r| r.ok()).collect();
 

@@ -4344,10 +4344,37 @@ Content-Type: multipart/form-data
 <p><strong>Bundle Structure:</strong></p>
 <pre><code>bundle.zip
 ├── openapi.yaml          # OpenAPI spec (or openapi.json, api.yaml, spec.yaml)
+├── bundle.yaml           # Optional manifest with dependencies
 └── handlers/             # Handler files (can also be at root or in src/)
     ├── get_pets.rs       # Matches operationId "getPets" or "get_pets"
     ├── create_pet.rs     # Matches operationId "createPet" or "create_pet"
     └── get_pet_by_id.rs  # Matches operationId "getPetById" or "get_pet_by_id"
+</code></pre>
+<p><strong>Bundle Manifest (bundle.yaml):</strong></p>
+<p>The optional <code>bundle.yaml</code> file can specify dependencies shared by all handlers:</p>
+<pre><code class="language-yaml">bundle:
+  name: my-api
+  version: 1.0.0
+
+dependencies:
+  regex: "1.10"
+  chrono:
+    version: "0.4"
+    features:
+      - serde
+  uuid:
+    version: "1.0"
+    features:
+      - v4
+      - serde
+
+routes:
+  - method: GET
+    path: /pets
+    handler: get_pets
+  - method: POST
+    path: /pets
+    handler: create_pet
 </code></pre>
 <p>Handler files are matched to OpenAPI operations by normalizing names:</p>
 <ul>
@@ -5012,6 +5039,10 @@ Content-Type: application/json
   "collection_id": "collection-uuid",
   "description": "List all pets",
   "code": "use rust_edge_gateway_sdk::prelude::*;\n\nfn handle(req: Request) -&gt; Response {\n    Response::ok(json!({\"pets\": []}))\n}\n\nhandler_loop!(handle);",
+  "dependencies": {
+    "regex": "1.10",
+    "chrono": { "version": "0.4", "features": ["serde"] }
+  },
   "enabled": true
 }
 </code></pre>
@@ -5024,9 +5055,26 @@ Content-Type: application/json
 <tr><td><code>collection_id</code></td><td>string</td><td>No</td><td>Parent collection UUID</td></tr>
 <tr><td><code>description</code></td><td>string</td><td>No</td><td>Description of the endpoint</td></tr>
 <tr><td><code>code</code></td><td>string</td><td>No</td><td>Rust handler code</td></tr>
+<tr><td><code>dependencies</code></td><td>object</td><td>No</td><td>Custom Cargo dependencies (mirrors Cargo.toml format)</td></tr>
 <tr><td><code>enabled</code></td><td>bool</td><td>No</td><td>Whether endpoint is active (default: true)</td></tr>
 </tbody></table>
 </div>
+<h3 id="dependencies-format"><a class="header" href="#dependencies-format">Dependencies Format</a></h3>
+<p>The <code>dependencies</code> field accepts an object where keys are crate names and values can be:</p>
+<ul>
+<li><strong>Simple version</strong>: <code>"regex": "1.10"</code></li>
+<li><strong>With features</strong>: <code>"chrono": { "version": "0.4", "features": ["serde"] }</code></li>
+<li><strong>Optional</strong>: <code>"tokio": { "version": "1", "optional": true }</code></li>
+</ul>
+<p>Example with multiple dependencies:</p>
+<pre><code class="language-json">{
+  "dependencies": {
+    "regex": "1.10",
+    "chrono": { "version": "0.4", "features": ["serde"] },
+    "uuid": { "version": "1.0", "features": ["v4", "serde"] }
+  }
+}
+</code></pre>
 <p><strong>Response:</strong></p>
 <pre><code class="language-json">{
   "ok": true,
@@ -5056,9 +5104,13 @@ Content-Type: application/json
 {
   "name": "Updated Name",
   "code": "// new code...",
+  "dependencies": {
+    "regex": "1.10"
+  },
   "enabled": false
 }
 </code></pre>
+<p>All fields are optional. Only provided fields are updated.</p>
 <h2 id="delete-endpoint"><a class="header" href="#delete-endpoint">Delete Endpoint</a></h2>
 <pre><code class="language-bash">DELETE /api/endpoints/{id}
 </code></pre>

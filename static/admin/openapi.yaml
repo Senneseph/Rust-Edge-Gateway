@@ -795,6 +795,28 @@ components:
           type: string
         code:
           type: string
+        dependencies:
+          type: object
+          description: |
+            Custom Cargo dependencies for this handler. Format mirrors Cargo.toml.
+            Simple version: {"regex": "1.10"}
+            With features: {"chrono": {"version": "0.4", "features": ["serde"]}}
+          additionalProperties:
+            oneOf:
+              - type: string
+                description: Simple version string
+              - type: object
+                properties:
+                  version:
+                    type: string
+                  features:
+                    type: array
+                    items:
+                      type: string
+                  optional:
+                    type: boolean
+                  default-features:
+                    type: boolean
 
     UpdateEndpointRequest:
       type: object
@@ -814,6 +836,24 @@ components:
           type: string
         enabled:
           type: boolean
+        dependencies:
+          type: object
+          description: Custom Cargo dependencies for this handler
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: object
+                properties:
+                  version:
+                    type: string
+                  features:
+                    type: array
+                    items:
+                      type: string
+                  optional:
+                    type: boolean
+                  default-features:
+                    type: boolean
 
     EndpointResponse:
       allOf:

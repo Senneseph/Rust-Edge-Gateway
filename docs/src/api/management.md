@@ -171,10 +171,41 @@ Content-Type: multipart/form-data
 ```
 bundle.zip
 ├── openapi.yaml          # OpenAPI spec (or openapi.json, api.yaml, spec.yaml)
+├── bundle.yaml           # Optional manifest with dependencies
 └── handlers/             # Handler files (can also be at root or in src/)
     ├── get_pets.rs       # Matches operationId "getPets" or "get_pets"
     ├── create_pet.rs     # Matches operationId "createPet" or "create_pet"
     └── get_pet_by_id.rs  # Matches operationId "getPetById" or "get_pet_by_id"
+```
+
+**Bundle Manifest (bundle.yaml):**
+
+The optional `bundle.yaml` file can specify dependencies shared by all handlers:
+
+```yaml
+bundle:
+  name: my-api
+  version: 1.0.0
+
+dependencies:
+  regex: "1.10"
+  chrono:
+    version: "0.4"
+    features:
+      - serde
+  uuid:
+    version: "1.0"
+    features:
+      - v4
+      - serde
+
+routes:
+  - method: GET
+    path: /pets
+    handler: get_pets
+  - method: POST
+    path: /pets
+    handler: create_pet
 ```
 
 Handler files are matched to OpenAPI operations by normalizing names:

@@ -12,19 +12,25 @@ use anyhow::{Context, Result};
 pub struct BundleManifest {
     /// Bundle metadata
     pub bundle: BundleInfo,
-    
+
     /// Domains this bundle responds to
     #[serde(default)]
     pub domains: Vec<String>,
-    
+
     /// TLS configuration
     #[serde(default)]
     pub tls: Option<TlsConfig>,
-    
+
     /// Service configurations
     #[serde(default)]
     pub services: HashMap<String, ServiceConfig>,
-    
+
+    /// Custom Cargo dependencies for handlers in this bundle.
+    /// Format mirrors Cargo.toml: {"regex": "1.10", "chrono": {"version": "0.4", "features": ["serde"]}}
+    /// These dependencies are applied to all handlers in the bundle.
+    #[serde(default)]
+    pub dependencies: Option<serde_json::Value>,
+
     /// Route definitions
     #[serde(default)]
     pub routes: Vec<RouteConfig>,
@@ -271,13 +277,49 @@ routes:
     #[test]
     fn test_env_var_expansion() {
         std::env::set_var("TEST_VAR", "hello");
-        
+
         let input = "value: ${TEST_VAR}";
         let expanded = expand_env_vars(input);
         assert_eq!(expanded, "value: hello");
-        
+
         let input_with_default = "value: ${MISSING_VAR:-default_value}";
         let expanded = expand_env_vars(input_with_default);
         assert_eq!(expanded, "value: default_value");
+    }
+
+    #[test]
+    fn test_parse_manifest_with_dependencies() {
+        let yaml = r#"
+bundle:
+  name: deps-test
+  version: 1.0.0
+
+dependencies:
+  regex: "1.10"
+  chrono:
+    version: "0.4"
+    features:
+      - serde
+  uuid:
+    version: "1"
+    features:
+      - v4
+      - serde
+
+routes:
+  - method: GET
+    path: /test
+    handler: test_handler
+"#;
+
+        let manifest = BundleManifest::parse(yaml).unwrap();
+        assert_eq!(manifest.bundle.name, "deps-test");
+        assert!(manifest.dependencies.is_some());
+
+        let deps = manifest.dependencies.unwrap();
+        assert!(deps.is_object());
+        assert!(deps.get("regex").is_some());
+        assert!(deps.get("chrono").is_some());
+        assert!(deps.get("uuid").is_some());
     }
 }

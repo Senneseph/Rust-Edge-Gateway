@@ -54,6 +54,10 @@ Content-Type: application/json
   "collection_id": "collection-uuid",
   "description": "List all pets",
   "code": "use rust_edge_gateway_sdk::prelude::*;\n\nfn handle(req: Request) -> Response {\n    Response::ok(json!({\"pets\": []}))\n}\n\nhandler_loop!(handle);",
+  "dependencies": {
+    "regex": "1.10",
+    "chrono": { "version": "0.4", "features": ["serde"] }
+  },
   "enabled": true
 }
 ```
@@ -69,7 +73,27 @@ Content-Type: application/json
 | `collection_id` | string | No | Parent collection UUID |
 | `description` | string | No | Description of the endpoint |
 | `code` | string | No | Rust handler code |
+| `dependencies` | object | No | Custom Cargo dependencies (mirrors Cargo.toml format) |
 | `enabled` | bool | No | Whether endpoint is active (default: true) |
+
+### Dependencies Format
+
+The `dependencies` field accepts an object where keys are crate names and values can be:
+
+- **Simple version**: `"regex": "1.10"`
+- **With features**: `"chrono": { "version": "0.4", "features": ["serde"] }`
+- **Optional**: `"tokio": { "version": "1", "optional": true }`
+
+Example with multiple dependencies:
+```json
+{
+  "dependencies": {
+    "regex": "1.10",
+    "chrono": { "version": "0.4", "features": ["serde"] },
+    "uuid": { "version": "1.0", "features": ["v4", "serde"] }
+  }
+}
+```
 
 **Response:**
 
@@ -108,9 +132,14 @@ Content-Type: application/json
 {
   "name": "Updated Name",
   "code": "// new code...",
+  "dependencies": {
+    "regex": "1.10"
+  },
   "enabled": false
 }
 ```
+
+All fields are optional. Only provided fields are updated.
 
 ## Delete Endpoint
 
