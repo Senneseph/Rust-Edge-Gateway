@@ -617,6 +617,23 @@ function app() {
         showMessage(msg, type) {
             this.message = msg;
             this.messageType = type;
+        },
+
+        async logout() {
+            try {
+                // Call logout endpoint
+                await fetch('/auth/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                });
+
+                // Redirect to login page
+                window.location.href = '/auth/login';
+            } catch (e) {
+                console.error('Logout failed:', e);
+                // Still redirect to login even if logout fails
+                window.location.href = '/auth/login';
+            }
         }
     };
 }

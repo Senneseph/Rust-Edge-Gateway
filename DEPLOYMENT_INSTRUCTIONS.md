@@ -106,3 +106,112 @@ To rollback to a previous version:
 3. Restart the service: `docker-compose -f docker-compose.prod.yml up -d`
 
 > **Note**: The SSH key path in the instructions assumes the key is stored at `$HOME/.ssh/a-icon-deploy`. If your key is stored elsewhere, update the paths accordingly.
+
+## Docker Hub Publishing
+
+### Prerequisites
+
+1. Docker Hub account (sign up at https://hub.docker.com/)
+2. Docker Hub repository created for this project
+3. Docker Hub access token (create in Account Settings > Security)
+4. Docker installed and running locally
+
+### Setup
+
+1. Add your Docker Hub username to the `.env` file:
+   ```
+   DOCKER_HUB_USERNAME=your_dockerhub_username
+   ```
+
+2. Log in to Docker Hub:
+   ```bash
+   docker login
+   ```
+   Enter your Docker Hub username and access token when prompted.
+
+### Building the Docker Image
+
+Use the provided build script:
+
+```bash
+# Build with default version (latest)
+./scripts/build-docker.sh
+
+# Build with specific version
+./scripts/build-docker.sh v1.0.0
+```
+
+### Publishing to Docker Hub
+
+Use the provided publish script:
+
+```bash
+# Publish with default version (latest)
+./scripts/publish-docker.sh your_dockerhub_username
+
+# Publish with specific version
+./scripts/publish-docker.sh v1.0.0 your_dockerhub_username
+```
+
+### Using the Published Image
+
+1. Pull the image from Docker Hub:
+   ```bash
+   docker pull your_dockerhub_username/rust-edge-gateway:latest
+   ```
+
+2. Update your `docker-compose.prod.yml` to use the published image:
+   ```yaml
+   services:
+     rust-edge-gateway:
+       image: your_dockerhub_username/rust-edge-gateway:latest
+       # ... rest of configuration
+   ```
+
+3. Start the service:
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d
+   ```
+
+### Automated CI/CD (Optional)
+
+For automated builds, you can set up a GitHub Actions workflow or use Docker Hub's automated builds feature.
+
+Example GitHub Actions workflow (`.github/workflows/docker-publish.yml`):
+
+```yaml
+name: Docker Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: Dockerfile.prod
+          push: true
+          tags: ${{ secrets.DOCKER_HUB_USERNAME }}/rust-edge-gateway:${{ github.ref_name }}
+```
+
+### Best Practices
+
+1. **Version Tagging**: Always use semantic versioning (e.g., v1.0.0) for production releases
+2. **Multi-arch Builds**: Consider building for multiple architectures (amd64, arm64) for broader compatibility
+3. **Image Optimization**: The production Dockerfile already uses multi-stage builds for minimal image size
+4. **Security**: Keep your Docker Hub access token secure and use it only in trusted environments

@@ -1,0 +1,46 @@
+# Docker ignore file for Rust Edge Gateway
+
+# Ignore git files
+git/
+.git/
+.gitignore
+.gitmodules
+
+# Ignore development files
+.env
+target/
+**/target/
+
+# Ignore IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Ignore build artifacts
+*.tar
+*.zip
+*.log
+
+# Ignore documentation build
+docs/book/
+
+# Ignore data directories
+data/
+handlers/
+
+# Ignore test files
+test_*.ps1
+test_*.sh
+
+# Ignore deployment scripts
+deploy/
+scripts/
+
+# Ignore local development files
+Dockerfile
+Dockerfile.cross
+docker-compose.yml
+
+# Ignore Cargo cache
+# Note: Cargo.lock is needed for Docker builds, so we don't ignore it
