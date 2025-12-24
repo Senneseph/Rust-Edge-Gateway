@@ -27,6 +27,12 @@ pub struct AppConfig {
     /// Default admin password for initial setup
     pub default_admin_password: Option<String>,
 
+    /// reCAPTCHA v3 site key for client-side integration
+    pub recaptcha_site_key: Option<String>,
+
+    /// reCAPTCHA v3 secret key for server-side verification
+    pub recaptcha_secret_key: Option<String>,
+
     /// Handler request timeout in seconds
     pub handler_timeout_secs: u64,
 
@@ -73,6 +79,9 @@ impl AppConfig {
                 .unwrap_or(64),
 
             default_admin_password: env::var("DEFAULT_ADMIN_PASSWORD").ok(),
+
+            recaptcha_site_key: env::var("RECAPTCHA_V3_SITE_KEY").ok(),
+            recaptcha_secret_key: env::var("RECAPTCHA_V3_SECRET_KEY").ok(),
         }
     }
 }

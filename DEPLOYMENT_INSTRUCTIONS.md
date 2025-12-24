@@ -105,7 +105,7 @@ To rollback to a previous version:
 2. Restore the previous docker-compose.prod.yml and .env files from backup
 3. Restart the service: `docker-compose -f docker-compose.prod.yml up -d`
 
-> **Note**: The SSH key path in the instructions assumes the key is stored at `$HOME/.ssh/a-icon-deploy`. If your key is stored elsewhere, update the paths accordingly.
+> **Note**: The SSH key path in the instructions assumes the key is stored at `$env:SSH_KEY`. If your key is stored elsewhere, update the paths accordingly.
 
 ## Docker Hub Publishing
 
