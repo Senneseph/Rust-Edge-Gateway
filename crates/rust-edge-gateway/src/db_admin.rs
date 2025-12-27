@@ -27,7 +27,7 @@ pub struct ApiKey {
     pub created_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
     pub enabled: bool,
-    pub permissions: Vec<String>, // e.g., ["read", "write", "admin"]
+    pub permissions: Vec<String>, // e.g., ["endpoints:read", "services:*", "domains:write"]
 }
 
 /// SQLite database wrapper for admin authentication and API keys

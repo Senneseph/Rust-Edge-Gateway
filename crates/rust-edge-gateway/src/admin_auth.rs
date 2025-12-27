@@ -208,54 +208,104 @@ pub async fn api_key_auth(
     Ok(ApiKeyExtract { key })
 }
 
-/// API key authentication middleware specifically for admin API endpoints
-pub async fn admin_api_key_auth(
-    State(state): State<Arc<AppState>>,
-    request: Request,
-    next: Next,
-) -> Result<Response, (StatusCode, String)> {
-    // Extract headers from request
-    let headers = request.headers().clone();
-    
-    // Validate API key using the existing api_key_auth function
-    // We need to extract the API key from headers manually since we can't reuse the extractor
+/// Helper function to validate API key and check permissions
+async fn validate_api_key_with_permission(
+    state: &Arc<AppState>,
+    request: &Request,
+    resource: &str,
+) -> Result<ApiKey, (StatusCode, String)> {
+    let headers = request.headers();
+
     let auth_header = headers.get("Authorization")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
-    
+
     // Extract API key from Bearer auth
     if !auth_header.starts_with("Bearer ") {
         return Err((StatusCode::UNAUTHORIZED, "API key required".to_string()));
     }
-    
+
     let api_key_str = &auth_header[7..];
-    
+
     // Get API key from database
     let admin_db = AdminDatabase::new(&state.config.data_dir)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to initialize admin database".to_string()))?;
-    
+
     let key = admin_db.get_api_key_by_value(api_key_str)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query admin database".to_string()))?
         .ok_or((StatusCode::UNAUTHORIZED, "Invalid API key".to_string()))?;
-    
+
     // Check if API key is enabled
     if !key.enabled {
         return Err((StatusCode::UNAUTHORIZED, "API key is disabled".to_string()));
     }
-    
+
     // Check if API key has expired
     if let Some(expires_at) = key.expires_at {
         if chrono::Utc::now() > expires_at {
             return Err((StatusCode::UNAUTHORIZED, "API key has expired".to_string()));
         }
     }
-    
-    // Check if API key has admin permissions
-    if !key.permissions.contains(&"admin".to_string()) {
-        return Err((StatusCode::FORBIDDEN, "API key does not have admin permissions".to_string()));
+
+    // Determine required permission based on HTTP method
+    let method = request.method();
+    let permission_type = if method == axum::http::Method::GET {
+        "read"
+    } else {
+        "write"
+    };
+
+    let required_permission = format!("{}:{}", resource, permission_type);
+    let wildcard_permission = format!("{}:*", resource);
+
+    // Check if API key has the required permission
+    if !key.permissions.contains(&required_permission) && !key.permissions.contains(&wildcard_permission) {
+        return Err((StatusCode::FORBIDDEN, format!(
+            "API key does not have '{}' permission (requires '{}' or '{}')",
+            resource, required_permission, wildcard_permission
+        )));
     }
-    
-    // API key auth succeeded, continue to the next middleware/handler
+
+    Ok(key)
+}
+
+/// API key authentication middleware for endpoints API
+pub async fn endpoints_api_key_auth(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Result<Response, (StatusCode, String)> {
+    validate_api_key_with_permission(&state, &request, "endpoints").await?;
+    Ok(next.run(request).await)
+}
+
+/// API key authentication middleware for services API
+pub async fn services_api_key_auth(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Result<Response, (StatusCode, String)> {
+    validate_api_key_with_permission(&state, &request, "services").await?;
+    Ok(next.run(request).await)
+}
+
+/// API key authentication middleware for domains API
+pub async fn domains_api_key_auth(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Result<Response, (StatusCode, String)> {
+    validate_api_key_with_permission(&state, &request, "domains").await?;
+    Ok(next.run(request).await)
+}
+
+/// API key authentication middleware for collections API
+pub async fn collections_api_key_auth(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Result<Response, (StatusCode, String)> {
+    validate_api_key_with_permission(&state, &request, "collections").await?;
     Ok(next.run(request).await)
 }
 
@@ -864,17 +914,70 @@ pub async fn api_keys_page() -> Response {
                 
                 <div class="form-group">
                     <label>Permissions:</label>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="permRead" name="permissions" value="read" checked>
-                        <label for="permRead">Read</label>
+                    <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">Select the resources and access levels for this API key.</p>
+
+                    <div style="margin-bottom: 10px;">
+                        <strong>Endpoints:</strong>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permEndpointsRead" name="permissions" value="endpoints:read">
+                            <label for="permEndpointsRead">Read</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permEndpointsWrite" name="permissions" value="endpoints:write">
+                            <label for="permEndpointsWrite">Write</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permEndpointsAll" name="permissions" value="endpoints:*">
+                            <label for="permEndpointsAll">Full Access</label>
+                        </div>
                     </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="permWrite" name="permissions" value="write" checked>
-                        <label for="permWrite">Write</label>
+
+                    <div style="margin-bottom: 10px;">
+                        <strong>Services:</strong>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permServicesRead" name="permissions" value="services:read">
+                            <label for="permServicesRead">Read</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permServicesWrite" name="permissions" value="services:write">
+                            <label for="permServicesWrite">Write</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permServicesAll" name="permissions" value="services:*">
+                            <label for="permServicesAll">Full Access</label>
+                        </div>
                     </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="permAdmin" name="permissions" value="admin">
-                        <label for="permAdmin">Admin</label>
+
+                    <div style="margin-bottom: 10px;">
+                        <strong>Domains:</strong>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permDomainsRead" name="permissions" value="domains:read">
+                            <label for="permDomainsRead">Read</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permDomainsWrite" name="permissions" value="domains:write">
+                            <label for="permDomainsWrite">Write</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permDomainsAll" name="permissions" value="domains:*">
+                            <label for="permDomainsAll">Full Access</label>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 10px;">
+                        <strong>Collections:</strong>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permCollectionsRead" name="permissions" value="collections:read">
+                            <label for="permCollectionsRead">Read</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permCollectionsWrite" name="permissions" value="collections:write">
+                            <label for="permCollectionsWrite">Write</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permCollectionsAll" name="permissions" value="collections:*">
+                            <label for="permCollectionsAll">Full Access</label>
+                        </div>
                     </div>
                 </div>
                 

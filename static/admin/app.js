@@ -201,7 +201,7 @@ function app() {
         async loadApiKeys() {
             this.loading = true;
             try {
-                const res = await fetch('/admin/api-keys');
+                const res = await fetch('/api/admin/api-keys');
                 const data = await res.json();
                 if (data.ok || data.success) {
                     this.apiKeys = data.data || [];
@@ -533,7 +533,7 @@ function app() {
 
         async createApiKey() {
             try {
-                const res = await fetch('/admin/api-keys', {
+                const res = await fetch('/api/admin/api-keys', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -604,7 +604,7 @@ function app() {
             if (!this.deleteKeyId) return;
 
             try {
-                const res = await fetch(`/admin/api-keys/${this.deleteKeyId}`, {
+                const res = await fetch(`/api/admin/api-keys/${this.deleteKeyId}`, {
                     method: 'DELETE'
                 });
                 const data = await res.json();
@@ -638,7 +638,7 @@ function app() {
 
         async enableApiKey(key) {
             try {
-                const res = await fetch(`/admin/api-keys/${key}/enable`, {
+                const res = await fetch(`/api/admin/api-keys/${key}/enable`, {
                     method: 'POST'
                 });
                 const data = await res.json();
@@ -655,7 +655,7 @@ function app() {
 
         async disableApiKey(key) {
             try {
-                const res = await fetch(`/admin/api-keys/${key}/disable`, {
+                const res = await fetch(`/api/admin/api-keys/${key}/disable`, {
                     method: 'POST'
                 });
                 const data = await res.json();
@@ -674,7 +674,7 @@ function app() {
             if (!confirm('Delete this API key? This cannot be undone.')) return;
 
             try {
-                const res = await fetch(`/admin/api-keys/${id}`, { method: 'DELETE' });
+                const res = await fetch(`/api/admin/api-keys/${id}`, { method: 'DELETE' });
                 const data = await res.json();
                 if (data.ok || data.success) {
                     await this.loadApiKeys();
