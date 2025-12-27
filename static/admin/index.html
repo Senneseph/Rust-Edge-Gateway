@@ -40,6 +40,12 @@
         .user-menu-dropdown { position: absolute; right: 0; top: 100%; background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); border-radius: 8px; min-width: 150px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 1000; margin-top: 0.5rem; }
         .user-menu-dropdown a { display: block; padding: 0.75rem 1rem; text-decoration: none; color: var(--pico-color); }
         .user-menu-dropdown a:hover { background: var(--pico-primary-focus); }
+        button.danger { background-color: var(--pico-del-color); border-color: var(--pico-del-color); }
+        button.danger:hover { background-color: var(--pico-del-hover-background-color); border-color: var(--pico-del-hover-background-color); }
+        button.outline.danger { color: var(--pico-del-color); border-color: var(--pico-del-color); background: transparent; }
+        button.outline.danger:hover { background-color: var(--pico-del-color); color: white; }
+        dialog[open] { display: flex; align-items: center; justify-content: center; }
+        dialog article { margin: 0; }
     </style>
 </head>
 <body>
@@ -335,7 +341,10 @@
             <div>
                 <header>
                     <h1>API Keys</h1>
-                    <button @click="newApiKey()">+ Generate API Key</button>
+                    <button @click="openCreateApiKeyDialog()" :disabled="apiKeys.length >= 256">+ Generate API Key</button>
+                    <span x-show="apiKeys.length >= 256" style="color: var(--pico-del-color); margin-left: 1rem;">
+                        Maximum limit of 256 API keys reached
+                    </span>
                 </header>
 
                 <div x-show="loading">Loading...</div>
@@ -351,14 +360,12 @@
                                           x-text="key.enabled ? 'Enabled' : 'Disabled'"></span>
                                 </div>
                                 <div class="btn-group">
-                                    <button class="outline" @click="copyApiKey(key.key)">Copy</button>
-                                    <button class="outline" @click="disableApiKey(key.key)" x-show="key.enabled">Disable</button>
-                                    <button class="outline" @click="enableApiKey(key.key)" x-show="!key.enabled">Enable</button>
-                                    <button class="outline" @click="deleteApiKey(key.id)">Delete</button>
+                                    <button class="outline" @click="copyApiKey(key.key_partial)">Copy Partial</button>
+                                    <button class="outline danger" @click="confirmDeleteApiKey(key.id, key.label)">Delete</button>
                                 </div>
                             </div>
-                            <div class="api-key-value" x-text="key.key"></div>
-                            <div class="api-key-permissions" x-show="key.permissions.length > 0">
+                            <div class="api-key-value" x-text="key.key_partial"></div>
+                            <div class="api-key-permissions" x-show="key.permissions && key.permissions.length > 0">
                                 <template x-for="perm in key.permissions">
                                     <span class="api-key-permission" x-text="perm"></span>
                                 </template>
@@ -372,39 +379,91 @@
                         </article>
                     </template>
                     <template x-if="apiKeys.length === 0 && !loading">
-                        <p>No API keys generated. <a href="#" @click.prevent="newApiKey()">Generate one</a></p>
+                        <p>No API keys generated. <a href="#" @click.prevent="openCreateApiKeyDialog()">Generate one</a></p>
                     </template>
                 </div>
-
-                <!-- New API Key Form -->
-                <template x-if="view === 'api-key-editor'">
-                    <div style="margin-top: 2rem; padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: 8px;">
-                        <h2>Generate New API Key</h2>
-                        <form @submit.prevent="saveApiKey()">
-                            <div class="grid">
-                                <label>Label <input type="text" x-model="currentApiKey.label" required></label>
-                                <label>Expires After (days) <input type="number" x-model="currentApiKey.expires_days" min="0" max="365" value="0"></label>
-                            </div>
-                            
-                            <label>Permissions</label>
-                            <div style="margin-bottom: 1rem;">
-                                <template x-for="perm in availablePermissions" :key="perm">
-                                    <label style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-                                        <input type="checkbox" :value="perm" x-model="currentApiKey.permissions">
-                                        <span style="margin-left: 0.5rem;" x-text="perm"></span>
-                                    </label>
-                                </template>
-                            </div>
-
-                            <div class="grid" style="margin-top: 1rem;">
-                                <button type="submit">Generate</button>
-                                <button type="button" class="outline" @click="view = 'api-keys'">Cancel</button>
-                            </div>
-                        </form>
-                    </div>
-                </template>
             </div>
         </template>
+
+        <!-- Create API Key Modal Dialog -->
+        <dialog :open="showCreateApiKeyDialog" @click.self="closeCreateApiKeyDialog()">
+            <article style="max-width: 500px;">
+                <header>
+                    <button aria-label="Close" rel="prev" @click="closeCreateApiKeyDialog()"></button>
+                    <h3>Generate New API Key</h3>
+                </header>
+                <form @submit.prevent="createApiKey()">
+                    <label>
+                        Name
+                        <input type="text" x-model="newApiKeyName" placeholder="e.g., Production API Key" required maxlength="100">
+                        <small>A descriptive name for this API key</small>
+                    </label>
+
+                    <label>
+                        Permissions (optional)
+                        <div style="margin-top: 0.5rem;">
+                            <template x-for="perm in availablePermissions" :key="perm">
+                                <label style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                                    <input type="checkbox" :value="perm" x-model="newApiKeyPermissions">
+                                    <span style="margin-left: 0.5rem;" x-text="perm"></span>
+                                </label>
+                            </template>
+                        </div>
+                    </label>
+
+                    <footer>
+                        <button type="button" class="outline" @click="closeCreateApiKeyDialog()">Cancel</button>
+                        <button type="submit" :disabled="!newApiKeyName">Generate API Key</button>
+                    </footer>
+                </form>
+            </article>
+        </dialog>
+
+        <!-- Show Generated API Key Modal Dialog -->
+        <dialog :open="showGeneratedKeyDialog" @click.self="closeGeneratedKeyDialog()">
+            <article style="max-width: 600px;">
+                <header>
+                    <h3>✅ API Key Generated Successfully</h3>
+                </header>
+                <div>
+                    <p><strong>Important:</strong> This is the only time you'll see the full API key. Please copy it now and store it securely.</p>
+
+                    <label>
+                        API Key
+                        <input type="text" :value="generatedApiKey" readonly style="font-family: monospace; font-size: 0.9rem;">
+                    </label>
+
+                    <div style="margin-top: 1rem;">
+                        <button @click="copyGeneratedKey()" class="outline">📋 Copy to Clipboard</button>
+                    </div>
+
+                    <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--pico-muted-text-color);">
+                        <strong>Name:</strong> <span x-text="generatedKeyLabel"></span>
+                    </p>
+                </div>
+                <footer>
+                    <button @click="closeGeneratedKeyDialog()">I've Saved the Key</button>
+                </footer>
+            </article>
+        </dialog>
+
+        <!-- Delete API Key Confirmation Dialog -->
+        <dialog :open="showDeleteConfirmDialog">
+            <article style="max-width: 400px;">
+                <header>
+                    <h3>⚠️ Delete API Key?</h3>
+                </header>
+                <div>
+                    <p>Are you sure you want to delete this API key?</p>
+                    <p><strong x-text="deleteKeyLabel"></strong></p>
+                    <p style="color: var(--pico-del-color);">This action cannot be undone. Any applications using this key will lose access immediately.</p>
+                </div>
+                <footer>
+                    <button class="outline" @click="closeDeleteConfirmDialog()">Cancel</button>
+                    <button class="danger" @click="deleteApiKeyConfirmed()">Delete API Key</button>
+                </footer>
+            </article>
+        </dialog>
 
         <!-- Login Redirect Logic -->
         <template x-if="view === 'login'">

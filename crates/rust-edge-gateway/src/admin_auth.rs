@@ -9,7 +9,7 @@ use axum::{
     middleware::Next,
 };
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, error};
 
 use crate::db_admin::{AdminDatabase, AdminUser, ApiKey};
 use crate::AppState;
@@ -197,7 +197,7 @@ pub async fn api_key_auth(
     if !key.enabled {
         return Err((StatusCode::UNAUTHORIZED, "API key is disabled".to_string()));
     }
-    
+   
     // Check if API key has expired
     if let Some(expires_at) = key.expires_at {
         if chrono::Utc::now() > expires_at {
@@ -206,6 +206,57 @@ pub async fn api_key_auth(
     }
     
     Ok(ApiKeyExtract { key })
+}
+
+/// API key authentication middleware specifically for admin API endpoints
+pub async fn admin_api_key_auth(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Result<Response, (StatusCode, String)> {
+    // Extract headers from request
+    let headers = request.headers().clone();
+    
+    // Validate API key using the existing api_key_auth function
+    // We need to extract the API key from headers manually since we can't reuse the extractor
+    let auth_header = headers.get("Authorization")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+    
+    // Extract API key from Bearer auth
+    if !auth_header.starts_with("Bearer ") {
+        return Err((StatusCode::UNAUTHORIZED, "API key required".to_string()));
+    }
+    
+    let api_key_str = &auth_header[7..];
+    
+    // Get API key from database
+    let admin_db = AdminDatabase::new(&state.config.data_dir)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to initialize admin database".to_string()))?;
+    
+    let key = admin_db.get_api_key_by_value(api_key_str)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query admin database".to_string()))?
+        .ok_or((StatusCode::UNAUTHORIZED, "Invalid API key".to_string()))?;
+    
+    // Check if API key is enabled
+    if !key.enabled {
+        return Err((StatusCode::UNAUTHORIZED, "API key is disabled".to_string()));
+    }
+    
+    // Check if API key has expired
+    if let Some(expires_at) = key.expires_at {
+        if chrono::Utc::now() > expires_at {
+            return Err((StatusCode::UNAUTHORIZED, "API key has expired".to_string()));
+        }
+    }
+    
+    // Check if API key has admin permissions
+    if !key.permissions.contains(&"admin".to_string()) {
+        return Err((StatusCode::FORBIDDEN, "API key does not have admin permissions".to_string()));
+    }
+    
+    // API key auth succeeded, continue to the next middleware/handler
+    Ok(next.run(request).await)
 }
 
 /// Handler for admin login page
@@ -529,6 +580,617 @@ pub async fn change_password_page() -> Response {
     axum::response::Html(html).into_response()
 }
 
+/// Handler for API Keys management page
+pub async fn api_keys_page() -> Response {
+    let html = r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Keys Management</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        h1 {
+            color: #333;
+            margin: 0;
+        }
+        
+        .nav-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 50%;
+            max-width: 600px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: #000;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        .checkbox-group {
+            margin: 10px 0;
+        }
+        
+        .checkbox-group label {
+            display: inline;
+            font-weight: normal;
+            margin-left: 5px;
+        }
+        
+        .table-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .status-active {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .status-disabled {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .key-display {
+            font-family: monospace;
+            background-color: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        
+        .alert {
+            padding: 12px;
+            margin: 15px 0;
+            border-radius: 4px;
+            display: none;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            display: block;
+        }
+        
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            display: block;
+        }
+        
+        .created-key-display {
+            background-color: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            font-family: monospace;
+        }
+        
+        .created-key-display pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .copy-btn {
+            background-color: #e9ecef;
+            border: none;
+            padding: 4px 8px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>API Keys Management</h1>
+        <div class="nav-buttons">
+            <button class="btn btn-secondary" onclick="window.location.href='/admin'">Back to Admin</button>
+            <button class="btn btn-primary" id="createKeyBtn">Create New API Key</button>
+        </div>
+    </div>
+    
+    <!-- Alert messages -->
+    <div id="alert" class="alert"></div>
+    
+    <!-- API Key Creation Modal -->
+    <div id="createKeyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New API Key</h2>
+                <span class="close" id="closeCreateModal">&times;</span>
+            </div>
+            
+            <form id="createKeyForm">
+                <div class="form-group">
+                    <label for="keyLabel">Label:</label>
+                    <input type="text" id="keyLabel" name="label" required placeholder="e.g., Production App, Development, CI/CD">
+                </div>
+                
+                <div class="form-group">
+                    <label for="keyExpiration">Expiration (days, 0 for no expiration):</label>
+                    <input type="number" id="keyExpiration" name="expires_days" min="0" value="0">
+                </div>
+                
+                <div class="form-group">
+                    <label>Permissions:</label>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="permRead" name="permissions" value="read" checked>
+                        <label for="permRead">Read</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="permWrite" name="permissions" value="write" checked>
+                        <label for="permWrite">Write</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="permAdmin" name="permissions" value="admin">
+                        <label for="permAdmin">Admin</label>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Create API Key</button>
+            </form>
+            
+            <!-- Display created key -->
+            <div id="createdKeyDisplay" class="created-key-display" style="display: none;">
+                <h3>New API Key Created</h3>
+                <p>⚠️ <strong>Important:</strong> This is the only time the full API key will be displayed. Copy it now and store it securely.</p>
+                <pre id="createdKeyValue"></pre>
+                <button class="btn btn-secondary copy-btn" onclick="copyToClipboard()">Copy to Clipboard</button>
+                <button class="btn btn-primary" onclick="closeCreatedKeyDisplay()">Done</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="confirmModalTitle">Confirm Action</h2>
+                <span class="close" id="closeConfirmModal">&times;</span>
+            </div>
+            
+            <p id="confirmModalMessage"></p>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-secondary" id="cancelConfirmBtn">Cancel</button>
+                <button class="btn btn-danger" id="confirmBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- API Keys Table -->
+    <div class="table-container">
+        <table id="apiKeysTable">
+            <thead>
+                <tr>
+                    <th>Label</th>
+                    <th>Key</th>
+                    <th>Created</th>
+                    <th>Expires</th>
+                    <th>Permissions</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="apiKeysTableBody">
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 20px;">
+                        <p>Loading API keys...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // Current action data
+        let currentAction = null;
+        let currentKeyId = null;
+        
+        // DOM elements
+        const createKeyModal = document.getElementById('createKeyModal');
+        const confirmModal = document.getElementById('confirmModal');
+        const closeCreateModal = document.getElementById('closeCreateModal');
+        const closeConfirmModal = document.getElementById('closeConfirmModal');
+        const createKeyBtn = document.getElementById('createKeyBtn');
+        const createKeyForm = document.getElementById('createKeyForm');
+        const createdKeyDisplay = document.getElementById('createdKeyDisplay');
+        const createdKeyValue = document.getElementById('createdKeyValue');
+        const cancelConfirmBtn = document.getElementById('cancelConfirmBtn');
+        const confirmBtn = document.getElementById('confirmBtn');
+        const alertDiv = document.getElementById('alert');
+        
+        // Open create key modal
+        createKeyBtn.onclick = function() {
+            createKeyModal.style.display = 'block';
+        }
+        
+        // Close modals
+        closeCreateModal.onclick = function() {
+            createKeyModal.style.display = 'none';
+        }
+        
+        closeConfirmModal.onclick = function() {
+            confirmModal.style.display = 'none';
+        }
+        
+        cancelConfirmBtn.onclick = function() {
+            confirmModal.style.display = 'none';
+        }
+        
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            if (event.target === createKeyModal) {
+                createKeyModal.style.display = 'none';
+            }
+            if (event.target === confirmModal) {
+                confirmModal.style.display = 'none';
+            }
+        }
+        
+        // Create API key form submission
+        createKeyForm.onsubmit = async function(e) {
+            e.preventDefault();
+            
+            const label = document.getElementById('keyLabel').value;
+            const expiresDays = parseInt(document.getElementById('keyExpiration').value) || 0;
+            
+            // Get selected permissions
+            const permissions = [];
+            const checkboxes = document.querySelectorAll('input[name="permissions"]:checked');
+            checkboxes.forEach(checkbox => {
+                permissions.push(checkbox.value);
+            });
+            
+            try {
+                const response = await fetch('/admin/api-keys', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        label: label,
+                        enabled: true,
+                        permissions: permissions,
+                        expires_days: expiresDays
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Show the created key
+                    const apiKeyData = data.data;
+                    createdKeyValue.textContent = apiKeyData.key;
+                    document.getElementById('createKeyForm').style.display = 'none';
+                    createdKeyDisplay.style.display = 'block';
+                    
+                    // Refresh the table
+                    loadApiKeys();
+                    
+                    showAlert('API key created successfully!', 'success');
+                } else {
+                    showAlert('Failed to create API key: ' + (data.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Error creating API key: ' + error.message, 'error');
+            }
+        }
+        
+        function closeCreatedKeyDisplay() {
+            createKeyModal.style.display = 'none';
+            document.getElementById('createKeyForm').style.display = 'block';
+            createdKeyDisplay.style.display = 'none';
+            createKeyForm.reset();
+        }
+        
+        function copyToClipboard() {
+            const keyValue = createdKeyValue.textContent;
+            navigator.clipboard.writeText(keyValue).then(function() {
+                showAlert('API key copied to clipboard!', 'success');
+            }, function(err) {
+                showAlert('Failed to copy API key: ' + err, 'error');
+            });
+        }
+        
+        // Load API keys on page load
+        loadApiKeys();
+        
+        async function loadApiKeys() {
+            try {
+                const response = await fetch('/admin/api-keys');
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderApiKeys(data.data);
+                } else {
+                    showAlert('Failed to load API keys: ' + (data.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert('Error loading API keys: ' + error.message, 'error');
+            }
+        }
+        
+        function renderApiKeys(keys) {
+            const tbody = document.getElementById('apiKeysTableBody');
+            
+            if (keys.length === 0) {
+                tbody.innerHTML = '
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 20px;">
+                            <p>No API keys found. Create your first API key!</p>
+                        </td>
+                    </tr>
+                ';
+                return;
+            }
+            
+            let html = '';
+            keys.forEach(key => {
+                const createdDate = new Date(key.created_at).toLocaleString();
+                const expiresDate = key.expires_at ? new Date(key.expires_at).toLocaleString() : 'Never';
+                const permissions = key.permissions.join(', ');
+                const statusClass = key.enabled ? 'status-active' : 'status-disabled';
+                const statusText = key.enabled ? 'Active' : 'Disabled';
+                
+                html += `
+                    <tr>
+                        <td>${escapeHtml(key.label)}</td>
+                        <td><span class="key-display">${escapeHtml(key.key_partial)}</span></td>
+                        <td>${createdDate}</td>
+                        <td>${expiresDate}</td>
+                        <td>${escapeHtml(permissions)}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td class="actions">
+                            ${key.enabled ?
+                                `<button class="btn btn-danger" onclick="toggleKeyStatus('${key.id}', false)">Disable</button>`
+                                : `<button class="btn btn-success" onclick="toggleKeyStatus('${key.id}', true)">Enable</button>`}
+                            <button class="btn btn-danger" onclick="confirmDelete('${key.id}')">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = html;
+        }
+        
+        function toggleKeyStatus(keyId, enable) {
+            const action = enable ? 'enable' : 'disable';
+            currentAction = action;
+            currentKeyId = keyId;
+            
+            document.getElementById('confirmModalTitle').textContent = enable ? 'Enable API Key' : 'Disable API Key';
+            document.getElementById('confirmModalMessage').textContent =
+                enable ? 'Are you sure you want to enable this API key?' : 'Are you sure you want to disable this API key?';
+            
+            confirmModal.style.display = 'block';
+        }
+        
+        function confirmDelete(keyId) {
+            currentAction = 'delete';
+            currentKeyId = keyId;
+            
+            document.getElementById('confirmModalTitle').textContent = 'Delete API Key';
+            document.getElementById('confirmModalMessage').textContent =
+                'Are you sure you want to permanently delete this API key? This action cannot be undone.';
+            
+            confirmModal.style.display = 'block';
+        }
+        
+        confirmBtn.onclick = async function() {
+            if (!currentAction || !currentKeyId) return;
+            
+            try {
+                let url = '';
+                let method = 'POST';
+                
+                if (currentAction === 'enable') {
+                    url = `/admin/api-keys/${currentKeyId}/enable`;
+                } else if (currentAction === 'disable') {
+                    url = `/admin/api-keys/${currentKeyId}/disable`;
+                } else if (currentAction === 'delete') {
+                    url = `/admin/api-keys/${currentKeyId}`;
+                    method = 'DELETE';
+                }
+                
+                const response = await fetch(url, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert(`API key ${currentAction}d successfully!`, 'success');
+                    loadApiKeys();
+                } else {
+                    showAlert(`Failed to ${currentAction} API key: ` + (data.message || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showAlert(`Error ${currentAction}ing API key: ` + error.message, 'error');
+            }
+            
+            confirmModal.style.display = 'none';
+            currentAction = null;
+            currentKeyId = null;
+        }
+        
+        function showAlert(message, type) {
+            alertDiv.textContent = message;
+            alertDiv.className = 'alert alert-' + type;
+            
+            // Hide alert after 5 seconds
+            setTimeout(() => {
+                alertDiv.style.display = 'none';
+            }, 5000);
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
+"#;
+
+    axum::response::Html(html).into_response()
+}
+
 /// Handler for logout
 pub async fn logout(
     State(state): State<Arc<AppState>>,
@@ -555,18 +1217,52 @@ pub async fn list_api_keys(
     let admin_db = AdminDatabase::new(&state.config.data_dir)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to initialize admin database".to_string()))?;
     
-    // For now, list all API keys (in production, you'd filter by the authenticated user)
-    // We'll need to get the admin user ID from the request context
-    let api_keys = admin_db.list_api_keys("admin")
+    // Get the admin user ID to filter API keys
+    let admin_user = admin_db.get_admin_by_username("admin")
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get admin user".to_string()))?
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Admin user not found".to_string()))?;
+    
+    // List API keys for the admin user
+    let api_keys = admin_db.list_api_keys(&admin_user.id)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query admin database".to_string()))?;
+    
+    // Create a safe response that masks the API keys
+    #[derive(serde::Serialize)]
+    struct SafeApiKey {
+        id: String,
+        label: String,
+        created_by: String,
+        created_at: String,
+        expires_at: Option<String>,
+        enabled: bool,
+        permissions: Vec<String>,
+        key_partial: String, // Only show partial key for security
+    }
+    
+    let safe_keys: Vec<SafeApiKey> = api_keys.iter()
+        .map(|key| {
+            let key_partial = if key.key.len() > 8 {
+                format!("{}...{}", &key.key[..4], &key.key[key.key.len()-4..])
+            } else {
+                key.key.clone()
+            };
+            
+            SafeApiKey {
+                id: key.id.clone(),
+                label: key.label.clone(),
+                created_by: key.created_by.clone(),
+                created_at: key.created_at.to_rfc3339(),
+                expires_at: key.expires_at.map(|dt| dt.to_rfc3339()),
+                enabled: key.enabled,
+                permissions: key.permissions.clone(),
+                key_partial,
+            }
+        })
+        .collect();
     
     Ok(axum::Json(JsonResponse {
         success: true,
-        data: serde_json::Value::Array(
-            api_keys.iter()
-                .map(|k| serde_json::to_value(k).unwrap())
-                .collect()
-        ),
+        data: serde_json::to_value(safe_keys).unwrap(),
     }))
 }
 
@@ -575,33 +1271,155 @@ pub async fn create_api_key(
     State(state): State<Arc<AppState>>,
     axum::extract::Json(create_data): axum::extract::Json<CreateApiKeyData>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
+    info!("Starting API key creation process");
+    
     let admin_db = AdminDatabase::new(&state.config.data_dir)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to initialize admin database".to_string()))?;
+        .map_err(|e| {
+            error!("Failed to initialize admin database: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to initialize admin database: {}", e))
+        })?;
+
+    info!("Successfully initialized admin database");
+
+    // Get the admin user ID to use as created_by
+    let admin_user = admin_db.get_admin_by_username("admin")
+        .map_err(|e| {
+            error!("Failed to get admin user: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to get admin user: {}", e))
+        })?
+        .ok_or((StatusCode::INTERNAL_SERVER_ERROR, "Admin user not found".to_string()))?;
+
+    info!("Found admin user with ID: {}", admin_user.id);
+
+    // Check API key limit (256 max)
+    let existing_keys = admin_db.list_api_keys(&admin_user.id)
+        .map_err(|e| {
+            error!("Failed to query admin database for existing keys: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to query admin database: {}", e))
+        })?;
+
+    info!("Found {} existing API keys", existing_keys.len());
+
+    if existing_keys.len() >= 256 {
+        return Err((StatusCode::BAD_REQUEST, "Maximum limit of 256 API keys reached. Please delete unused keys before creating new ones.".to_string()));
+    }
 
     // Create the API key using the database method
-    // In production, you'd get the created_by from the authenticated user
-    let api_key = admin_db.create_api_key(&create_data.label, "admin", create_data.permissions)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create API key".to_string()))?;
+    // Use the actual admin user ID instead of "admin" string
+    info!("Creating API key with label: {}, permissions: {:?}, expires_days: {}",
+          create_data.label, create_data.permissions, create_data.expires_days);
+    
+    let api_key = admin_db.create_api_key(&create_data.label, &admin_user.id, create_data.permissions, create_data.expires_days)
+        .map_err(|e| {
+            error!("Failed to create API key in database: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to create API key: {}", e))
+        })?;
 
-    info!(key = %api_key.key, "New API key created");
+    info!(key = %api_key.key, "New API key created successfully");
+
+    // Create a response that shows the full key only once (at creation)
+    #[derive(serde::Serialize)]
+    struct ApiKeyCreationResponse {
+        id: String,
+        label: String,
+        created_by: String,
+        created_at: String,
+        expires_at: Option<String>,
+        enabled: bool,
+        permissions: Vec<String>,
+        key: String, // Full key shown only at creation
+        key_partial: String, // Partial key for display
+    }
+
+    let key_partial = if api_key.key.len() > 8 {
+        format!("{}...{}", &api_key.key[..4], &api_key.key[api_key.key.len()-4..])
+    } else {
+        api_key.key.clone()
+    };
+
+    let response_data = ApiKeyCreationResponse {
+        id: api_key.id,
+        label: api_key.label,
+        created_by: api_key.created_by,
+        created_at: api_key.created_at.to_rfc3339(),
+        expires_at: api_key.expires_at.map(|dt| dt.to_rfc3339()),
+        enabled: api_key.enabled,
+        permissions: api_key.permissions,
+        key: api_key.key.clone(), // Full key shown only once
+        key_partial: key_partial,
+    };
 
     Ok(axum::Json(JsonResponse {
         success: true,
-        data: serde_json::to_value(api_key).unwrap(),
+        data: serde_json::to_value(response_data).unwrap(),
     }))
 }
 
-/// Handler for enabling an API key
-pub async fn enable_api_key(
+
+/// Handler for disabling an API key (old version using key value)
+pub async fn disable_api_key_by_key(
     State(state): State<Arc<AppState>>,
     Path(key): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let admin_db = AdminDatabase::new(&state.config.data_dir)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to initialize admin database".to_string()))?;
 
-    // Note: enable_api_key method doesn't exist in AdminDatabase
-    // For now, we'll just return success. In production, you'd implement this method.
-    info!(key = %key, "API key enable requested (not implemented)");
+    admin_db.disable_api_key(&key)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to disable API key".to_string()))?;
+
+    info!(key = %key, "API key disabled");
+
+    Ok(axum::Json(JsonResponse {
+        success: true,
+        data: serde_json::Value::String("API key disabled".to_string()),
+    }))
+}
+
+/// Handler for disabling an API key by ID
+pub async fn disable_api_key(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let admin_db = AdminDatabase::new(&state.config.data_dir)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to initialize admin database".to_string()))?;
+
+    // First get the key to log it, then disable by ID
+    if let Some(key) = admin_db.get_api_key_by_id(&id)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query admin database".to_string()))? {
+        
+        admin_db.disable_api_key(&key.key)
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to disable API key".to_string()))?;
+        
+        info!(key = %key.key, "API key disabled");
+    } else {
+        return Err((StatusCode::NOT_FOUND, "API key not found".to_string()));
+    }
+
+    Ok(axum::Json(JsonResponse {
+        success: true,
+        data: serde_json::Value::String("API key disabled".to_string()),
+    }))
+}
+
+/// Handler for enabling an API key by ID
+pub async fn enable_api_key(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let admin_db = AdminDatabase::new(&state.config.data_dir)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to initialize admin database".to_string()))?;
+
+    // First get the key to log it, then enable by ID
+    if let Some(key) = admin_db.get_api_key_by_id(&id)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query admin database".to_string()))? {
+        
+        admin_db.enable_api_key(&key.key)
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to enable API key".to_string()))?;
+        
+        info!(key = %key.key, "API key enabled");
+    } else {
+        return Err((StatusCode::NOT_FOUND, "API key not found".to_string()));
+    }
 
     Ok(axum::Json(JsonResponse {
         success: true,
@@ -609,44 +1427,32 @@ pub async fn enable_api_key(
     }))
 }
 
-/// Handler for disabling an API key
-pub async fn disable_api_key(
-    State(state): State<Arc<AppState>>,
-    Path(key): Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let admin_db = AdminDatabase::new(&state.config.data_dir)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to initialize admin database".to_string()))?;
-    
-    admin_db.disable_api_key(&key)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to disable API key".to_string()))?;
-    
-    info!(key = %key, "API key disabled");
-    
-    Ok(axum::Json(JsonResponse {
-        success: true,
-        data: serde_json::Value::String("API key disabled".to_string()),
-    }))
-}
-
-/// Handler for deleting an API key
+/// Handler for deleting an API key by ID
 pub async fn delete_api_key(
     State(state): State<Arc<AppState>>,
-    Path(key): Path<String>,
+    Path(id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let admin_db = AdminDatabase::new(&state.config.data_dir)
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to initialize admin database".to_string()))?;
 
-    // Use disable instead of delete since delete_api_key doesn't exist
-    admin_db.disable_api_key(&key)
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete API key".to_string()))?;
-    
-    info!(key = %key, "API key deleted");
+    // First get the key to log it, then delete by ID
+    if let Some(key) = admin_db.get_api_key_by_id(&id)
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to query admin database".to_string()))? {
+        
+        admin_db.delete_api_key(&key.key)
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete API key".to_string()))?;
+        
+        info!(key = %key.key, "API key deleted");
+    } else {
+        return Err((StatusCode::NOT_FOUND, "API key not found".to_string()));
+    }
     
     Ok(axum::Json(JsonResponse {
         success: true,
         data: serde_json::Value::String("API key deleted".to_string()),
     }))
 }
+
 
 /// API key creation data structure
 #[derive(serde::Deserialize)]
@@ -676,8 +1482,9 @@ pub fn create_admin_auth_router() -> Router<Arc<AppState>> {
 pub fn create_protected_admin_routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/api-keys", get(list_api_keys).post(create_api_key))
-        .route("/api-keys/{key}/enable", post(enable_api_key))
-        .route("/api-keys/{key}/disable", post(disable_api_key))
+        .route("/api-keys/page", get(api_keys_page))
+        .route("/api-keys/{id}/enable", post(enable_api_key))
+        .route("/api-keys/{id}/disable", post(disable_api_key))
         .route("/api-keys/{id}", delete(delete_api_key))
 }
 

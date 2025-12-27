@@ -67,7 +67,18 @@ function app() {
             'api-keys:write',
             'api-keys:delete'
         ],
-        
+
+        // API Key Modal States
+        showCreateApiKeyDialog: false,
+        showGeneratedKeyDialog: false,
+        showDeleteConfirmDialog: false,
+        newApiKeyName: '',
+        newApiKeyPermissions: [],
+        generatedApiKey: '',
+        generatedKeyLabel: '',
+        deleteKeyId: null,
+        deleteKeyLabel: '',
+
         // Import state
         importFile: null,
         importOptions: {
@@ -504,35 +515,47 @@ function app() {
         },
 
         // ===== API Key Methods =====
-        newApiKey() {
-            this.currentApiKey = {
-                id: null,
-                label: '',
-                key: '',
-                enabled: true,
-                permissions: [],
-                expires_days: 0,
-                created_at: '',
-                expires_at: ''
-            };
-            this.message = '';
-            this.view = 'api-key-editor';
+        openCreateApiKeyDialog() {
+            if (this.apiKeys.length >= 256) {
+                this.showMessage('Maximum limit of 256 API keys reached', 'error');
+                return;
+            }
+            this.newApiKeyName = '';
+            this.newApiKeyPermissions = [];
+            this.showCreateApiKeyDialog = true;
         },
 
-        async saveApiKey() {
+        closeCreateApiKeyDialog() {
+            this.showCreateApiKeyDialog = false;
+            this.newApiKeyName = '';
+            this.newApiKeyPermissions = [];
+        },
+
+        async createApiKey() {
             try {
                 const res = await fetch('/admin/api-keys', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(this.currentApiKey)
+                    body: JSON.stringify({
+                        label: this.newApiKeyName,
+                        enabled: true,
+                        permissions: this.newApiKeyPermissions,
+                        expires_days: 0
+                    })
                 });
 
                 const data = await res.json();
                 if (data.ok || data.success) {
-                    this.currentApiKey = data.data;
-                    this.showMessage('API key generated successfully!', 'success');
+                    // Close create dialog
+                    this.closeCreateApiKeyDialog();
+
+                    // Show the generated key
+                    this.generatedApiKey = data.data.key;
+                    this.generatedKeyLabel = data.data.label;
+                    this.showGeneratedKeyDialog = true;
+
+                    // Reload the list
                     await this.loadApiKeys();
-                    this.view = 'api-keys';
                 } else {
                     this.showMessage(data.error || 'Failed to generate API key', 'error');
                 }
@@ -541,12 +564,59 @@ function app() {
             }
         },
 
-        async copyApiKey(key) {
+        closeGeneratedKeyDialog() {
+            this.showGeneratedKeyDialog = false;
+            this.generatedApiKey = '';
+            this.generatedKeyLabel = '';
+        },
+
+        async copyGeneratedKey() {
             try {
-                await navigator.clipboard.writeText(key);
+                await navigator.clipboard.writeText(this.generatedApiKey);
                 this.showMessage('API key copied to clipboard!', 'success');
             } catch (e) {
                 this.showMessage('Failed to copy to clipboard', 'error');
+            }
+        },
+
+        async copyApiKey(key) {
+            try {
+                await navigator.clipboard.writeText(key);
+                this.showMessage('Partial key copied to clipboard!', 'success');
+            } catch (e) {
+                this.showMessage('Failed to copy to clipboard', 'error');
+            }
+        },
+
+        confirmDeleteApiKey(id, label) {
+            this.deleteKeyId = id;
+            this.deleteKeyLabel = label;
+            this.showDeleteConfirmDialog = true;
+        },
+
+        closeDeleteConfirmDialog() {
+            this.showDeleteConfirmDialog = false;
+            this.deleteKeyId = null;
+            this.deleteKeyLabel = '';
+        },
+
+        async deleteApiKeyConfirmed() {
+            if (!this.deleteKeyId) return;
+
+            try {
+                const res = await fetch(`/admin/api-keys/${this.deleteKeyId}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.ok || data.success) {
+                    this.showMessage('API key deleted successfully', 'success');
+                    await this.loadApiKeys();
+                    this.closeDeleteConfirmDialog();
+                } else {
+                    this.showMessage(data.error || 'Failed to delete API key', 'error');
+                }
+            } catch (e) {
+                this.showMessage('Failed to delete API key: ' + e.message, 'error');
             }
         },
 

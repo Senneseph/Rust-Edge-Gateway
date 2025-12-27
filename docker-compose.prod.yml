@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   rust-edge-gateway:
-    image: rust-edge-gateway:latest
+    image: senneseph/rust-edge-gateway:latest
     container_name: rust-edge-gateway
     restart: unless-stopped
     ports:
@@ -26,5 +26,6 @@ services:
       start_period: 40s
 
 volumes:
-  sqlite_data:
+  data:
+  handlers:
 

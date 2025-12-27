@@ -145,25 +145,40 @@ impl AdminDatabase {
     }
     
     /// Create a new API key
-    pub fn create_api_key(&self, label: &str, created_by: &str, permissions: Vec<String>) -> Result<ApiKey> {
+    pub fn create_api_key(&self, label: &str, created_by: &str, permissions: Vec<String>, expires_days: i32) -> Result<ApiKey> {
         let key = uuid::Uuid::new_v4().to_string();
         let id = uuid::Uuid::new_v4().to_string();
-        
+
         let permissions_json = serde_json::to_string(&permissions).unwrap_or_default();
-        
+
+        // Calculate expiration date if expires_days > 0
+        let created_at = Utc::now();
+        let expires_at = if expires_days > 0 {
+            Some(created_at + chrono::Duration::days(expires_days as i64))
+        } else {
+            None
+        };
+
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO api_keys (id, key, label, created_by, permissions) VALUES (?, ?, ?, ?, ?)",
-            params![id, key, label, created_by, permissions_json],
+            "INSERT INTO api_keys (id, key, label, created_by, permissions, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+            params![
+                id,
+                key,
+                label,
+                created_by,
+                permissions_json,
+                expires_at.map(|dt| dt.to_rfc3339())
+            ],
         )?;
-        
+
         Ok(ApiKey {
             id,
             key,
             label: label.to_string(),
             created_by: created_by.to_string(),
-            created_at: Utc::now(),
-            expires_at: None,
+            created_at,
+            expires_at,
             enabled: true,
             permissions,
         })
@@ -246,7 +261,29 @@ impl AdminDatabase {
         
         Ok(())
     }
-    
+
+    /// Enable an API key
+    pub fn enable_api_key(&self, key: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE api_keys SET enabled = 1 WHERE key = ?",
+            [key],
+        )?;
+        
+        Ok(())
+    }
+
+    /// Delete an API key permanently
+    pub fn delete_api_key(&self, key: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM api_keys WHERE key = ?",
+            [key],
+        )?;
+        
+        Ok(())
+    }
+
     /// Update API key permissions
     pub fn update_api_key_permissions(&self, key: &str, permissions: Vec<String>) -> Result<()> {
         let permissions_json = serde_json::to_string(&permissions).unwrap_or_default();
@@ -258,6 +295,39 @@ impl AdminDatabase {
         )?;
         
         Ok(())
+    }
+
+    /// Get API key by ID (for management purposes)
+    pub fn get_api_key_by_id(&self, id: &str) -> Result<Option<ApiKey>> {
+        let conn = self.conn.lock().unwrap();
+        let api_key = conn.query_row(
+            "SELECT id, key, label, created_by, created_at, expires_at, enabled, permissions FROM api_keys WHERE id = ?",
+            [id],
+            |row| {
+                let permissions_str: String = row.get(7)?;
+                let permissions: Vec<String> = serde_json::from_str(&permissions_str).unwrap_or_default();
+                let created_at_str: String = row.get(4)?;
+                let expires_at_str: Option<String> = row.get(5).ok();
+
+                Ok(ApiKey {
+                    id: row.get(0)?,
+                    key: row.get(1)?,
+                    label: row.get(2)?,
+                    created_by: row.get(3)?,
+                    created_at: chrono::DateTime::parse_from_rfc3339(&created_at_str)
+                        .map(|dt| dt.with_timezone(&Utc))
+                        .unwrap_or_else(|_| Utc::now()),
+                    expires_at: expires_at_str.and_then(|s| {
+                        chrono::DateTime::parse_from_rfc3339(&s)
+                            .map(|dt| dt.with_timezone(&Utc))
+                            .ok()
+                    }),
+                    enabled: row.get(6)?,
+                    permissions,
+                })
+            }
+        ).optional()?;
+        Ok(api_key)
     }
 }
 
@@ -288,7 +358,7 @@ mod tests {
         assert!(!user.requires_password_change);
         
         // Create API key
-        let api_key = db.create_api_key("test-key", &user.id, vec!["read".to_string(), "write".to_string()]).unwrap();
+        let api_key = db.create_api_key("test-key", &user.id, vec!["read".to_string(), "write".to_string()], 0).unwrap();
         
         // Get API key by value
         let found_key = db.get_api_key_by_value(&api_key.key).unwrap().unwrap();

@@ -1,5 +1,9 @@
-# Rust Edge Gateway Platform - Production Multi-Stage Build
-# Stage 1: Build
+# Rust Edge Gateway - Production Container with Rust Toolchain
+# Multi-stage build: toolchain layers are cached, only binary transfers on updates
+
+# =============================================================================
+# Stage 1: Build the application
+# =============================================================================
 FROM rust:1.92-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
@@ -7,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+WORKDIR /build
 
 # Copy workspace files
 COPY Cargo.toml Cargo.lock ./
@@ -16,47 +20,37 @@ COPY crates ./crates
 # Build release binary
 RUN cargo build --release --bin rust-edge-gateway
 
-# Stage 2: Runtime
-FROM debian:bookworm-slim
+# =============================================================================
+# Stage 2: Runtime image with Rust toolchain for handler compilation
+# =============================================================================
+FROM rust:1.92-slim-bookworm
 
+# Install runtime dependencies (this layer is cached after first deploy)
 RUN apt-get update && apt-get install -y \
-    ca-certificates \
+    pkg-config \
+    libssl-dev \
     sqlite3 \
-    libssl3 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
-
-# Create app user
-RUN useradd -r -s /bin/false rustgateway
 
 WORKDIR /app
 
-# Copy the binary from builder
-COPY --from=builder /app/target/release/rust-edge-gateway /app/rust-edge-gateway
+# Copy only the compiled binary and static assets (small, changes frequently)
+COPY --from=builder /build/target/release/rust-edge-gateway ./rust-edge-gateway
+COPY --from=builder /build/crates/rust-edge-gateway-sdk ./crates/rust-edge-gateway-sdk
+COPY static ./static
 
-# Copy static files
-COPY static /app/static
-
-# Copy SDK for handler compilation (handlers need this)
-COPY crates/rust-edge-gateway-sdk /app/crates/rust-edge-gateway-sdk
-
-# Create directories
-RUN mkdir -p /app/data /app/handlers && \
-    chown -R rustgateway:rustgateway /app
-
-# Install Rust for handler compilation (minimal)
-RUN apt-get update && apt-get install -y curl && \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal && \
-    rm -rf /var/lib/apt/lists/*
-
-ENV PATH="/root/.cargo/bin:${PATH}"
+# Create directories for data and handlers
+RUN mkdir -p /app/data /app/handlers
 
 # Expose ports
+# 8080 - Main gateway (handler execution)
+# 8081 - Admin interface
 EXPOSE 8080 8081
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
     CMD curl -f http://localhost:8081/api/health || exit 1
 
-# Run as root (needed for cargo)
-CMD ["/app/rust-edge-gateway"]
+CMD ["./rust-edge-gateway"]
 
