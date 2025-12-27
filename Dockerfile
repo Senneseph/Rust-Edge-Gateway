@@ -4,7 +4,7 @@
 # =============================================================================
 # Stage 1: Build the application
 # =============================================================================
-FROM rust:1.86-slim-bookworm AS builder
+FROM rust:1.92-slim-bookworm AS builder
 
 RUN apt-get update && apt-get install -y \
     pkg-config \
@@ -18,7 +18,7 @@ RUN cargo build --release --bin rust-edge-gateway
 # =============================================================================
 # Stage 2: Runtime image with Rust toolchain for handler compilation
 # =============================================================================
-FROM rust:1.86-slim-bookworm
+FROM rust:1.92-slim-bookworm
 
 # Install runtime dependencies (this layer is cached after first deploy)
 RUN apt-get update && apt-get install -y \
