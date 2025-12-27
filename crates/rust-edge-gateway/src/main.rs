@@ -18,7 +18,6 @@ mod openapi;
 mod bundle;
 mod services;
 mod runtime;  // New: Actor-based runtime
-mod handlers; // Built-in handlers for services
 mod admin_auth; // New: Admin authentication
 mod rate_limit; // Rate limiting for authentication
 mod session; // Session management for admin UI
@@ -26,7 +25,7 @@ mod session; // Session management for admin UI
 use anyhow::Result;
 use axum::{
     Router,
-    routing::{get, post, put, delete},
+    routing::{get, post, delete},
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -36,7 +35,7 @@ use tower_http::{
     trace::TraceLayer,
 };
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
- 
+  
 use crate::config::AppConfig;
 use crate::db::Database;
 use crate::worker::WorkerManager;
@@ -46,7 +45,10 @@ use crate::runtime::{
     HandlerRegistry,
     context::{RuntimeConfig, ContextBuilder},
 };
-use crate::admin_auth::{self, create_admin_auth_router, endpoints_api_key_auth, services_api_key_auth, domains_api_key_auth, collections_api_key_auth};
+use crate::admin_auth::{
+    create_admin_auth_router, endpoints_api_key_auth, services_api_key_auth,
+    domains_api_key_auth, collections_api_key_auth, get_recaptcha_site_key,
+};
 
 /// Shared application state
 pub struct AppState {
@@ -207,18 +209,16 @@ async fn main() -> Result<()> {
     let admin_api = Router::new()
         // API Keys management
         .route("/api-keys", get(admin_auth::list_api_keys).post(admin_auth::create_api_key))
-        .route("/api-keys/page", get(admin_auth::api_keys_page))
         .route("/api-keys/{id}/enable", post(admin_auth::enable_api_key))
         .route("/api-keys/{id}/disable", post(admin_auth::disable_api_key))
         .route("/api-keys/{id}", delete(admin_auth::delete_api_key))
+        // reCAPTCHA site key (for static login page)
+        .route("/recaptcha-site-key", get(admin_auth::get_recaptcha_site_key))
         // System stats and health (also available to admin UI)
         .route("/stats", get(api::get_stats))
         // Import operations (admin only - creates endpoints/services)
         .route("/import/openapi", post(api::import_openapi))
         .route("/import/bundle", post(api::import_bundle))
-        // MinIO built-in handlers (admin utility)
-        .route("/minio/objects", get(handlers::minio::list_objects).post(handlers::minio::upload_object))
-        .route("/minio/objects/{*key}", get(handlers::minio::get_object).delete(handlers::minio::delete_object))
         .layer(axum::middleware::from_fn_with_state(state.clone(), session::session_auth));
 
     // Public API routes (no authentication required)

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Keys Management</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="css/api-keys.css">
+</head>
+<body>
+    <div class="header">
+        <h1>API Keys Management</h1>
+        <div class="nav-buttons">
+            <button class="btn btn-secondary" onclick="window.location.href='/admin/'">Back to Admin</button>
+            <button class="btn btn-primary" id="createKeyBtn">Create New API Key</button>
+        </div>
+    </div>
+    
+    <!-- Alert messages -->
+    <div id="alert" class="alert"></div>
+    
+    <!-- API Key Creation Modal -->
+    <div id="createKeyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New API Key</h2>
+                <span class="close" id="closeCreateModal">&times;</span>
+            </div>
+            
+            <form id="createKeyForm">
+                <div class="form-group">
+                    <label for="keyLabel">Label:</label>
+                    <input type="text" id="keyLabel" name="label" required placeholder="e.g., Production App, Development, CI/CD">
+                </div>
+                
+                <div class="form-group">
+                    <label for="keyExpiration">Expiration (days, 0 for no expiration):</label>
+                    <input type="number" id="keyExpiration" name="expires_days" min="0" value="0">
+                </div>
+                
+                <div class="form-group">
+                    <label>Permissions:</label>
+                    <p style="font-size: 0.9em; color: #666; margin-bottom: 10px;">Select the resources and access levels for this API key.</p>
+
+                    <div style="margin-bottom: 10px;">
+                        <strong>Endpoints:</strong>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permEndpointsRead" name="permissions" value="endpoints:read">
+                            <label for="permEndpointsRead">Read</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permEndpointsWrite" name="permissions" value="endpoints:write">
+                            <label for="permEndpointsWrite">Write</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permEndpointsAll" name="permissions" value="endpoints:*">
+                            <label for="permEndpointsAll">Full Access</label>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 10px;">
+                        <strong>Services:</strong>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permServicesRead" name="permissions" value="services:read">
+                            <label for="permServicesRead">Read</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permServicesWrite" name="permissions" value="services:write">
+                            <label for="permServicesWrite">Write</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permServicesAll" name="permissions" value="services:*">
+                            <label for="permServicesAll">Full Access</label>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 10px;">
+                        <strong>Domains:</strong>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permDomainsRead" name="permissions" value="domains:read">
+                            <label for="permDomainsRead">Read</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permDomainsWrite" name="permissions" value="domains:write">
+                            <label for="permDomainsWrite">Write</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permDomainsAll" name="permissions" value="domains:*">
+                            <label for="permDomainsAll">Full Access</label>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 10px;">
+                        <strong>Collections:</strong>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permCollectionsRead" name="permissions" value="collections:read">
+                            <label for="permCollectionsRead">Read</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permCollectionsWrite" name="permissions" value="collections:write">
+                            <label for="permCollectionsWrite">Write</label>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="permCollectionsAll" name="permissions" value="collections:*">
+                            <label for="permCollectionsAll">Full Access</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Create API Key</button>
+            </form>
+            
+            <!-- Display created key -->
+            <div id="createdKeyDisplay" class="created-key-display" style="display: none;">
+                <h3>New API Key Created</h3>
+                <p>⚠️ <strong>Important:</strong> This is the only time the full API key will be displayed. Copy it now and store it securely.</p>
+                <pre id="createdKeyValue"></pre>
+                <button class="btn btn-secondary copy-btn" onclick="copyToClipboard()">Copy to Clipboard</button>
+                <button class="btn btn-primary" onclick="closeCreatedKeyDisplay()">Done</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="confirmModalTitle">Confirm Action</h2>
+                <span class="close" id="closeConfirmModal">&times;</span>
+            </div>
+            
+            <p id="confirmModalMessage"></p>
+            
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-secondary" id="cancelConfirmBtn">Cancel</button>
+                <button class="btn btn-danger" id="confirmBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- API Keys Table -->
+    <div class="table-container">
+        <table id="apiKeysTable">
+            <thead>
+                <tr>
+                    <th>Label</th>
+                    <th>Key</th>
+                    <th>Created</th>
+                    <th>Expires</th>
+                    <th>Permissions</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="apiKeysTableBody">
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 20px;">
+                        <p>Loading API keys...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script src="js/api-keys.js"></script>
+</body>
+</html>
+

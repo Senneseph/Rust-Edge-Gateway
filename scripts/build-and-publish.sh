@@ -40,20 +40,26 @@ fi
 # Step 3: Login to Docker Hub (if token is set)
 echo ""
 echo "Step 3: Logging in to Docker Hub..."
+
+# Create a temporary Docker config to avoid credential store issues
+DOCKER_CONFIG_DIR=$(mktemp -d)
+trap "rm -rf $DOCKER_CONFIG_DIR" EXIT
+echo '{"auths":{}}' > "$DOCKER_CONFIG_DIR/config.json"
+
 if [ -n "$DOCKER_HUB_TOKEN" ]; then
-    echo "$DOCKER_HUB_TOKEN" | docker login -u "$DOCKER_HUB_USERNAME" --password-stdin
+    echo "$DOCKER_HUB_TOKEN" | docker --config "$DOCKER_CONFIG_DIR" login -u "$DOCKER_HUB_USERNAME" --password-stdin
 else
     echo "No DOCKER_HUB_TOKEN found, attempting interactive login..."
-    docker login -u "$DOCKER_HUB_USERNAME"
+    docker --config "$DOCKER_CONFIG_DIR" login -u "$DOCKER_HUB_USERNAME"
 fi
 
 # Step 4: Push to Docker Hub
 echo ""
 echo "Step 4: Pushing to Docker Hub..."
-docker push $DOCKER_HUB_USERNAME/rust-edge-gateway:$VERSION
+docker --config "$DOCKER_CONFIG_DIR" push $DOCKER_HUB_USERNAME/rust-edge-gateway:$VERSION
 
 if [ "$VERSION" != "latest" ]; then
-    docker push $DOCKER_HUB_USERNAME/rust-edge-gateway:latest
+    docker --config "$DOCKER_CONFIG_DIR" push $DOCKER_HUB_USERNAME/rust-edge-gateway:latest
 fi
 
 echo ""
