@@ -46,7 +46,7 @@ use crate::runtime::{
     HandlerRegistry,
     context::{RuntimeConfig, ContextBuilder},
 };
-use crate::admin_auth::{admin_auth, admin_api_key_auth, create_admin_auth_router, create_protected_admin_routes};
+use crate::admin_auth::{self, create_admin_auth_router, endpoints_api_key_auth, services_api_key_auth, domains_api_key_auth, collections_api_key_auth};
 
 /// Shared application state
 pub struct AppState {
@@ -166,109 +166,64 @@ async fn main() -> Result<()> {
         session_store,
     });
 
-    // Build admin API router (for session-based authentication)
-    let admin_api_session = Router::new()
-        // Domains
-        .route("/domains", get(api::list_domains))
-        .route("/domains", post(api::create_domain))
-        .route("/domains/{id}", get(api::get_domain))
-        .route("/domains/{id}", put(api::update_domain))
-        .route("/domains/{id}", delete(api::delete_domain))
-        .route("/domains/{id}/collections", get(api::list_domain_collections))
-        // Collections
-        .route("/collections", get(api::list_collections))
-        .route("/collections", post(api::create_collection))
-        .route("/collections/{id}", get(api::get_collection))
-        .route("/collections/{id}", put(api::update_collection))
-        .route("/collections/{id}", delete(api::delete_collection))
-        // Services
-        .route("/services", get(api::list_services))
-        .route("/services", post(api::create_service))
-        .route("/services/{id}", get(api::get_service))
-        .route("/services/{id}", put(api::update_service))
-        .route("/services/{id}", delete(api::delete_service))
-        .route("/services/{id}/test", post(api::test_service))
-        .route("/services/{id}/activate", post(api::activate_service))
-        .route("/services/{id}/deactivate", post(api::deactivate_service))
-        // Endpoints
-        .route("/endpoints", get(api::list_endpoints))
-        .route("/endpoints", post(api::create_endpoint))
-        .route("/endpoints/{id}", get(api::get_endpoint))
-        .route("/endpoints/{id}", put(api::update_endpoint))
-        .route("/endpoints/{id}", delete(api::delete_endpoint))
-        .route("/endpoints/{id}/code", get(api::get_endpoint_code))
-        .route("/endpoints/{id}/code", put(api::update_endpoint_code))
-        .route("/endpoints/{id}/compile", post(api::compile_endpoint))
-        .route("/endpoints/{id}/start", post(api::start_endpoint))
-        .route("/endpoints/{id}/stop", post(api::stop_endpoint))
-        // Import
+    // ============================================================================
+    // API Routes - Consolidated under /api
+    // ============================================================================
+
+    // Endpoints API - protected by API key with endpoints:* permissions
+    let endpoints_api = Router::new()
+        .route("/", get(api::list_endpoints).post(api::create_endpoint))
+        .route("/{id}", get(api::get_endpoint).put(api::update_endpoint).delete(api::delete_endpoint))
+        .route("/{id}/code", get(api::get_endpoint_code).put(api::update_endpoint_code))
+        .route("/{id}/compile", post(api::compile_endpoint))
+        .route("/{id}/start", post(api::start_endpoint))
+        .route("/{id}/stop", post(api::stop_endpoint))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), endpoints_api_key_auth));
+
+    // Services API - protected by API key with services:* permissions
+    let services_api = Router::new()
+        .route("/", get(api::list_services).post(api::create_service))
+        .route("/{id}", get(api::get_service).put(api::update_service).delete(api::delete_service))
+        .route("/{id}/test", post(api::test_service))
+        .route("/{id}/activate", post(api::activate_service))
+        .route("/{id}/deactivate", post(api::deactivate_service))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), services_api_key_auth));
+
+    // Domains API - protected by API key with domains:* permissions
+    let domains_api = Router::new()
+        .route("/", get(api::list_domains).post(api::create_domain))
+        .route("/{id}", get(api::get_domain).put(api::update_domain).delete(api::delete_domain))
+        .route("/{id}/collections", get(api::list_domain_collections))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), domains_api_key_auth));
+
+    // Collections API - protected by API key with collections:* permissions
+    let collections_api = Router::new()
+        .route("/", get(api::list_collections).post(api::create_collection))
+        .route("/{id}", get(api::get_collection).put(api::update_collection).delete(api::delete_collection))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), collections_api_key_auth));
+
+    // Admin API - protected by session authentication (for Admin UI only)
+    // This includes API key management and system operations
+    let admin_api = Router::new()
+        // API Keys management
+        .route("/api-keys", get(admin_auth::list_api_keys).post(admin_auth::create_api_key))
+        .route("/api-keys/page", get(admin_auth::api_keys_page))
+        .route("/api-keys/{id}/enable", post(admin_auth::enable_api_key))
+        .route("/api-keys/{id}/disable", post(admin_auth::disable_api_key))
+        .route("/api-keys/{id}", delete(admin_auth::delete_api_key))
+        // System stats and health (also available to admin UI)
+        .route("/stats", get(api::get_stats))
+        // Import operations (admin only - creates endpoints/services)
         .route("/import/openapi", post(api::import_openapi))
         .route("/import/bundle", post(api::import_bundle))
-        // System
-        .route("/health", get(api::health_check))
-        .route("/stats", get(api::get_stats))
-        // MinIO built-in handlers
-        .route("/minio/objects", get(handlers::minio::list_objects))
-        .route("/minio/objects", post(handlers::minio::upload_object))
-        .route("/minio/objects/{*key}", get(handlers::minio::get_object))
-        .route("/minio/objects/{*key}", delete(handlers::minio::delete_object));
-
-    // Build admin API router (for API key authentication)
-    let admin_api_key = Router::new()
-        // Domains
-        .route("/domains", get(api::list_domains))
-        .route("/domains", post(api::create_domain))
-        .route("/domains/{id}", get(api::get_domain))
-        .route("/domains/{id}", put(api::update_domain))
-        .route("/domains/{id}", delete(api::delete_domain))
-        .route("/domains/{id}/collections", get(api::list_domain_collections))
-        // Collections
-        .route("/collections", get(api::list_collections))
-        .route("/collections", post(api::create_collection))
-        .route("/collections/{id}", get(api::get_collection))
-        .route("/collections/{id}", put(api::update_collection))
-        .route("/collections/{id}", delete(api::delete_collection))
-        // Services
-        .route("/services", get(api::list_services))
-        .route("/services", post(api::create_service))
-        .route("/services/{id}", get(api::get_service))
-        .route("/services/{id}", put(api::update_service))
-        .route("/services/{id}", delete(api::delete_service))
-        .route("/services/{id}/test", post(api::test_service))
-        .route("/services/{id}/activate", post(api::activate_service))
-        .route("/services/{id}/deactivate", post(api::deactivate_service))
-        // Endpoints
-        .route("/endpoints", get(api::list_endpoints))
-        .route("/endpoints", post(api::create_endpoint))
-        .route("/endpoints/{id}", get(api::get_endpoint))
-        .route("/endpoints/{id}", put(api::update_endpoint))
-        .route("/endpoints/{id}", delete(api::delete_endpoint))
-        .route("/endpoints/{id}/code", get(api::get_endpoint_code))
-        .route("/endpoints/{id}/code", put(api::update_endpoint_code))
-        .route("/endpoints/{id}/compile", post(api::compile_endpoint))
-        .route("/endpoints/{id}/start", post(api::start_endpoint))
-        .route("/endpoints/{id}/stop", post(api::stop_endpoint))
-        // Import
-        .route("/import/openapi", post(api::import_openapi))
-        .route("/import/bundle", post(api::import_bundle))
-        // System
-        .route("/health", get(api::health_check))
-        .route("/stats", get(api::get_stats))
-        // MinIO built-in handlers
-        .route("/minio/objects", get(handlers::minio::list_objects))
-        .route("/minio/objects", post(handlers::minio::upload_object))
-        .route("/minio/objects/{*key}", get(handlers::minio::get_object))
-        .route("/minio/objects/{*key}", delete(handlers::minio::delete_object));
-
-    // Create protected admin API router with session authentication middleware
-    let protected_admin_api_session = admin_api_session.layer(axum::middleware::from_fn_with_state(state.clone(), admin_auth));
-
-    // Create protected admin API router with API key authentication middleware
-    let protected_admin_api_key = admin_api_key.layer(axum::middleware::from_fn_with_state(state.clone(), admin_api_key_auth));
-
-    // Create protected admin routes (API keys management) with session authentication middleware
-    let protected_admin_routes = create_protected_admin_routes()
+        // MinIO built-in handlers (admin utility)
+        .route("/minio/objects", get(handlers::minio::list_objects).post(handlers::minio::upload_object))
+        .route("/minio/objects/{*key}", get(handlers::minio::get_object).delete(handlers::minio::delete_object))
         .layer(axum::middleware::from_fn_with_state(state.clone(), session::session_auth));
+
+    // Public API routes (no authentication required)
+    let public_api = Router::new()
+        .route("/health", get(api::health_check));
 
     // Create protected static file service for admin UI
     let protected_static = Router::new()
@@ -276,11 +231,15 @@ async fn main() -> Result<()> {
         .layer(axum::middleware::from_fn_with_state(state.clone(), session::session_auth));
 
     // Build admin router (serves static files + API)
+    // All API access is now under /api with proper sub-paths
     let admin_router = Router::new()
-        .nest("/api", protected_admin_api_session) // Session-based API access
-        .nest("/api-key", protected_admin_api_key) // API key-based access
-        .nest("/auth", create_admin_auth_router()) // Public auth routes (login, password change)
-        .nest("/admin", protected_admin_routes) // Protected admin routes (API keys)
+        .nest("/api/endpoints", endpoints_api)      // API key auth: endpoints:*
+        .nest("/api/services", services_api)        // API key auth: services:*
+        .nest("/api/domains", domains_api)          // API key auth: domains:*
+        .nest("/api/collections", collections_api)  // API key auth: collections:*
+        .nest("/api/admin", admin_api)              // Session auth: Admin UI only
+        .nest("/api", public_api)                   // Public: health check
+        .nest("/auth", create_admin_auth_router())  // Public auth routes (login, password change)
         .fallback_service(protected_static.into_service());
 
     // Build main gateway router

@@ -13,9 +13,9 @@ This document summarizes the comprehensive security improvements implemented for
 **Solution**:
 - Split router into two separate functions:
   - `create_admin_auth_router()` - Public routes (login, password change, logout)
-  - `create_protected_admin_routes()` - Protected routes (API key management)
-- Protected routes now require admin authentication middleware
-- Routes moved from `/auth/api-keys` to `/admin/api-keys`
+  - Admin API routes defined in main.rs with session authentication
+- Protected routes now require session authentication middleware
+- Routes consolidated under `/api/admin/*` for admin operations
 
 **Files Modified**:
 - `crates/rust-edge-gateway/src/admin_auth.rs`
@@ -115,7 +115,7 @@ This document summarizes the comprehensive security improvements implemented for
    - Added rate limiting to API key middleware
 
 4. `static/admin/app.js`
-   - Updated API key management routes from `/api/api-keys` to `/admin/api-keys`
+   - Updated API key management routes to `/api/admin/api-keys`
    - Updated all API key CRUD operations
 
 ## Build Status
