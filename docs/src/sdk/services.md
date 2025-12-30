@@ -1,26 +1,54 @@
-# Services
+# Service Providers
 
-Rust Edge Gateway connects your handlers to backend services via Service Actors. Services are accessed through the Context API using an actor-based message-passing architecture.
+Rust Edge Gateway connects your handlers to backend services via **Service Providers**. Service Providers are optional, long-running processes that implement standardized interfaces for databases, caches, storage, and other backend services.
 
 ## Overview
 
-Services are:
-1. **Configured** in the Admin UI or via API
-2. **Started as actors** when the gateway launches
-3. **Accessed via Context** in your handler code
-4. **Thread-safe** through message-passing
+Service Providers are:
+1. **Optional** - Only loaded when needed by your endpoints
+2. **Dynamic** - Can be loaded/unloaded at runtime via API
+3. **Abstract** - Implement standard interfaces (Database, Cache, Storage)
+4. **Long-running** - Maintain connection pools and state
+5. **Message-passing** - Communicate via async message passing for thread safety
 
-## Available Service Types
+## Available Service Provider Types
 
-| Service | Description | Use Cases |
-|---------|-------------|-----------|
-| **PostgreSQL** | Advanced relational database | Complex queries, transactions |
-| **MySQL** | Popular relational database | Web applications, compatibility |
-| **SQLite** | Embedded SQL database | Local data, caching, simple apps |
-| **Redis** | In-memory data store | Caching, sessions, pub/sub |
-| **MinIO/S3** | Object storage | File uploads, media storage |
-| **FTP/SFTP** | File transfer protocols | File uploads, vendor integrations |
-| **Email** | SMTP email sending | Notifications, alerts, reports |
+Service Providers implement standardized interfaces. The following types are supported:
+
+| Service Provider Type | Interface | Description | Use Cases |
+|----------------------|-----------|-------------|-----------|
+| **Database** | `DatabaseProvider` | Relational databases | Data storage, complex queries |
+| **Cache** | `CacheProvider` | Key-value stores | Caching, sessions, temporary data |
+| **Storage** | `StorageProvider` | Object storage | File uploads, media, large objects |
+| **Email** | `EmailProvider` | Email sending | Notifications, alerts, reports |
+
+### Database Service Providers
+
+| Provider | Description | Interface |
+|----------|-------------|----------|
+| **PostgreSQL** | Advanced relational database | `DatabaseProvider` |
+| **MySQL** | Popular relational database | `DatabaseProvider` |
+| **SQLite** | Embedded SQL database | `DatabaseProvider` |
+
+### Cache Service Providers
+
+| Provider | Description | Interface |
+|----------|-------------|----------|
+| **Redis** | In-memory data store | `CacheProvider` |
+| **Memcached** | Distributed memory cache | `CacheProvider` |
+
+### Storage Service Providers
+
+| Provider | Description | Interface |
+|----------|-------------|----------|
+| **MinIO** | S3-compatible storage | `StorageProvider` |
+| **FTP/SFTP** | File transfer protocols | `StorageProvider` |
+
+### Email Service Providers
+
+| Provider | Description | Interface |
+|----------|-------------|----------|
+| **SMTP** | Email sending | `EmailProvider` |
 
 ## Configuring Services
 
@@ -60,9 +88,8 @@ Services are accessed through the Context:
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
-    let db = ctx.database("main-db").await?;
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let db = ctx.services.require_db()?;
 
     // Query with parameters
     let users = db.query(
@@ -71,7 +98,7 @@ pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerErro
     ).await?;
 
     Ok(Response::ok(json!({"users": users})))
-}
+});
 ```
 
 ### Cache Example
@@ -79,9 +106,8 @@ pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerErro
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
-    let cache = ctx.cache("redis").await?;
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let cache = ctx.services.require_cache()?;
 
     // Try cache first
     if let Some(cached) = cache.get("user:123").await? {
@@ -89,14 +115,14 @@ pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerErro
     }
 
     // Cache miss - fetch from database
-    let db = ctx.database("main-db").await?;
+    let db = ctx.services.require_db()?;
     let user = db.query_one("SELECT * FROM users WHERE id = $1", &[&123]).await?;
 
     // Store in cache (TTL in seconds)
     cache.set("user:123", &user, 300).await?;
 
     Ok(Response::ok(json!({"source": "db", "data": user})))
-}
+});
 ```
 
 ### Storage Example
@@ -104,9 +130,8 @@ pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerErro
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
-    let storage = ctx.storage("s3").await?;
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    let storage = ctx.services.require_storage()?;
 
     // Upload file
     let data = req.body_bytes();
@@ -116,7 +141,7 @@ pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerErro
     let url = storage.presigned_url("uploads/file.txt", 3600).await?;
 
     Ok(Response::ok(json!({"download_url": url})))
-}
+});
 ```
 
 ## Actor-Based Architecture

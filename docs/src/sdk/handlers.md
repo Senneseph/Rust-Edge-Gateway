@@ -16,10 +16,9 @@ The `#[handler]` attribute generates the dynamic library entry point:
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Response {
+handler!(async fn handle(ctx: &Context, req: Request) -> Response {
     Response::ok(json!({"path": req.path, "method": req.method}))
-}
+});
 ```
 
 This generates a `handler_entry` symbol that the gateway loads and calls directly.
@@ -38,13 +37,12 @@ And return:
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Response {
+handler!(async fn handle(ctx: &Context, req: Request) -> Response {
     Response::ok(json!({
         "message": "Hello!",
         "path": req.path
     }))
-}
+});
 ```
 
 ### Handler with Error Handling
@@ -60,8 +58,7 @@ struct CreateItem {
     price: f64,
 }
 
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
     // These all use ? operator - errors become HTTP responses
     let auth = req.require_header("Authorization")?;
     let item: CreateItem = req.json()?;
@@ -71,7 +68,7 @@ pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerErro
     }
 
     Ok(Response::created(json!({"name": item.name})))
-}
+});
 ```
 
 ## Using Services via Context
@@ -81,24 +78,23 @@ The `Context` provides access to Service Actors:
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
     // Database operations
-    let db = ctx.database("main-db").await?;
+    let db = ctx.services.require_db()?;
     let users = db.query("SELECT * FROM users WHERE active = $1", &[&true]).await?;
 
     // Cache operations
-    let cache = ctx.cache("redis").await?;
+    let cache = ctx.services.require_cache()?;
     if let Some(cached) = cache.get("users:all").await? {
         return Ok(Response::ok(cached));
     }
 
     // Storage operations
-    let storage = ctx.storage("s3").await?;
+    let storage = ctx.services.require_storage()?;
     let file = storage.get("config.json").await?;
 
     Ok(Response::ok(json!({"users": users})))
-}
+});
 ```
 
 ## Async by Default
@@ -106,8 +102,7 @@ pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerErro
 All handlers are async - the gateway runs them on a Tokio runtime:
 
 ```rust
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Response {
+handler!(async fn handle(ctx: &Context, req: Request) -> Response {
     // You can use .await directly
     let data = fetch_from_api().await;
 
@@ -118,7 +113,7 @@ pub async fn handle(ctx: &Context, req: Request) -> Response {
     );
 
     Response::ok(json!({"users": users, "products": products}))
-}
+});
 ```
 
 ## Example: Complete CRUD Handler
@@ -126,8 +121,7 @@ pub async fn handle(ctx: &Context, req: Request) -> Response {
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
     match (req.method.as_str(), req.path.as_str()) {
         ("GET", "/items") => list_items(ctx).await,
         ("POST", "/items") => create_item(ctx, &req).await,
@@ -135,31 +129,31 @@ pub async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerErro
         ("DELETE", _) if req.path.starts_with("/items/") => delete_item(ctx, &req).await,
         _ => Err(HandlerError::MethodNotAllowed("Use GET, POST, or DELETE".into())),
     }
-}
+});
 
 async fn list_items(ctx: &Context) -> Result<Response, HandlerError> {
-    let db = ctx.database("main-db").await?;
+    let db = ctx.services.require_db()?;
     let items = db.query("SELECT * FROM items", &[]).await?;
     Ok(Response::ok(json!({"items": items})))
 }
 
 async fn create_item(ctx: &Context, req: &Request) -> Result<Response, HandlerError> {
     let item: NewItem = req.json()?;
-    let db = ctx.database("main-db").await?;
+    let db = ctx.services.require_db()?;
     let id = db.execute("INSERT INTO items (name) VALUES ($1) RETURNING id", &[&item.name]).await?;
     Ok(Response::created(json!({"id": id})))
 }
 
 async fn get_item(ctx: &Context, req: &Request) -> Result<Response, HandlerError> {
     let id = req.path.strip_prefix("/items/").unwrap_or("");
-    let db = ctx.database("main-db").await?;
+    let db = ctx.services.require_db()?;
     let item = db.query_one("SELECT * FROM items WHERE id = $1", &[&id]).await?;
     Ok(Response::ok(item))
 }
 
 async fn delete_item(ctx: &Context, req: &Request) -> Result<Response, HandlerError> {
     let id = req.path.strip_prefix("/items/").unwrap_or("");
-    let db = ctx.database("main-db").await?;
+    let db = ctx.services.require_db()?;
     db.execute("DELETE FROM items WHERE id = $1", &[&id]).await?;
     Ok(Response::no_content())
 }

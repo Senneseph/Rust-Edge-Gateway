@@ -9,11 +9,10 @@ Every handler follows the same pattern:
 ```rust
 use rust_edge_gateway_sdk::prelude::*;
 
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Response {
+handler!(async fn handle(ctx: &Context, req: Request) -> Response {
     // Your logic here
     Response::ok(json!({"status": "success"}))
-}
+});
 ```
 
 ### The Prelude
@@ -37,18 +36,17 @@ use rust_edge_gateway_sdk::prelude::*;
 Your handler function receives a `Context` and `Request`, and returns a `Response`:
 
 ```rust
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Response {
+handler!(async fn handle(ctx: &Context, req: Request) -> Response {
     // Access request data
     let method = &req.method;  // "GET", "POST", etc.
     let path = &req.path;      // "/users/123"
 
-    // Access services via ctx (database, cache, storage)
-    // let db = ctx.database();
+    // Access services via ctx.services
+    // let db = ctx.services.require_db()?;
 
     // Return a response
     Response::ok(json!({"received": path}))
-}
+});
 ```
 
 ### The Handler Attribute
@@ -56,10 +54,9 @@ pub async fn handle(ctx: &Context, req: Request) -> Response {
 The `#[handler]` attribute macro generates the entry point for the dynamic library:
 
 ```rust
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Response {
+handler!(async fn handle(ctx: &Context, req: Request) -> Response {
     // ...
-}
+});
 
 // This generates:
 // #[no_mangle]
@@ -203,22 +200,21 @@ Response::text(200, "<html><body>Hello</body></html>")
 The `Context` provides access to Service Actors:
 
 ```rust
-#[handler]
-pub async fn handle(ctx: &Context, req: Request) -> Response {
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
     // Access database service
-    let db = ctx.database("main-db").await?;
-    let users = db.query("SELECT * FROM users").await?;
+    let db = ctx.services.require_db()?;
+    let users = db.query("SELECT * FROM users", &[]).await?;
 
     // Access cache service
-    let cache = ctx.cache("redis").await?;
-    cache.set("key", "value", 300).await?;
+    let cache = ctx.services.require_cache()?;
+    cache.set("key", "value", Some(300)).await?;
 
     // Access storage service
-    let storage = ctx.storage("s3").await?;
+    let storage = ctx.services.require_storage()?;
     storage.put("file.txt", data).await?;
 
     Response::ok(json!({"users": users}))
-}
+});
 ```
 
 ## Next Steps

@@ -1,0 +1,20 @@
+{
+  "name": "Main PostgreSQL Database",
+  "service_type": "postgres",
+  "config": {
+    "host": "localhost",
+    "port": 5432,
+    "database": "myapp",
+    "username": "app_user",
+    "password": "secure-password",
+    "ssl_mode": "prefer",
+    "pool_size": 10,
+    "connect_timeout": 30,
+    "keepalives": true,
+    "keepalives_idle": 60,
+    "keepalives_interval": 15,
+    "keepalives_count": 5
+  },
+  "enabled": true,
+  "description": "Primary PostgreSQL database for application data"
+}

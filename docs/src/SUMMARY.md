@@ -5,6 +5,7 @@
 # Getting Started
 
 - [Quick Start](./getting-started/quick-start.md)
+- [Step-by-Step Guide](./getting-started/step-by-step-guide.md)
 - [Your First Handler](./getting-started/first-handler.md)
 - [Handler Lifecycle](./getting-started/lifecycle.md)
 

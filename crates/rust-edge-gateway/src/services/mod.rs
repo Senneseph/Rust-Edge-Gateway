@@ -11,18 +11,6 @@
 //! - FTP/SFTP - File transfer services
 //! - Email - SMTP email sending
 
-#![allow(dead_code)]
-
-pub mod sqlite;
-pub mod minio;
-pub mod mysql;
-pub mod postgres;
-pub mod redis;
-pub mod memcached;
-pub mod mongodb;
-pub mod ftp;
-pub mod email;
-
 use anyhow::Result;
 use serde_json::Value;
 use std::sync::Arc;
@@ -83,42 +71,7 @@ impl Default for ServiceRegistry {
 /// Create a service connector from config
 pub fn create_connector(service_type: ServiceType, config: &Value) -> Result<Arc<dyn ServiceConnector>> {
     match service_type {
-        ServiceType::Sqlite => {
-            let cfg: sqlite::SqliteConfig = serde_json::from_value(config.clone())?;
-            Ok(Arc::new(sqlite::SqliteConnector::new(cfg)?))
-        }
-        ServiceType::Minio => {
-            let cfg: minio::MinioConfig = serde_json::from_value(config.clone())?;
-            Ok(Arc::new(minio::MinioConnector::new(cfg)))
-        }
-        ServiceType::Mysql => {
-            let cfg: mysql::MysqlConfig = serde_json::from_value(config.clone())?;
-            Ok(Arc::new(mysql::MysqlConnector::new(cfg)))
-        }
-        ServiceType::Postgres => {
-            let cfg: postgres::PostgresConfig = serde_json::from_value(config.clone())?;
-            Ok(Arc::new(postgres::PostgresConnector::new(cfg)))
-        }
-        ServiceType::Redis => {
-            let cfg: redis::RedisConfig = serde_json::from_value(config.clone())?;
-            Ok(Arc::new(redis::RedisConnector::new(cfg)))
-        }
-        ServiceType::Memcached => {
-            let cfg: memcached::MemcachedConfig = serde_json::from_value(config.clone())?;
-            Ok(Arc::new(memcached::MemcachedConnector::new(cfg)))
-        }
-        ServiceType::Mongodb => {
-            let cfg: mongodb::MongodbConfig = serde_json::from_value(config.clone())?;
-            Ok(Arc::new(mongodb::MongodbConnector::new(cfg)))
-        }
-        ServiceType::Ftp => {
-            let cfg: ftp::FtpConfig = serde_json::from_value(config.clone())?;
-            Ok(Arc::new(ftp::FtpConnector::new(cfg)))
-        }
-        ServiceType::Email => {
-            let cfg: email::EmailConfig = serde_json::from_value(config.clone())?;
-            Ok(Arc::new(email::EmailConnector::new(cfg)))
-        }
+
     }
 }
 

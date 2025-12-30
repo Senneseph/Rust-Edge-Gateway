@@ -16,7 +16,6 @@ mod api;
 mod compiler;
 mod openapi;
 mod bundle;
-mod services;
 mod runtime;  // New: Actor-based runtime
 mod admin_auth; // New: Admin authentication
 mod rate_limit; // Rate limiting for authentication

@@ -1,8 +1,10 @@
-# Services API
+# Service Providers API
 
-Services represent backend connections (databases, caches, storage) that handlers can use.
+Service Providers represent optional, long-running backend service integrations (databases, caches, storage) that handlers can use. Service Providers are dynamically loaded and managed via this API.
 
-## List Services
+## List Service Providers
+
+List all configured Service Providers.
 
 ```bash
 GET /api/services
@@ -31,7 +33,9 @@ GET /api/services
 }
 ```
 
-## Create Service
+## Create Service Provider
+
+Create a new Service Provider with the specified configuration.
 
 ```bash
 POST /api/services
@@ -50,6 +54,8 @@ Content-Type: application/json
   "enabled": true
 }
 ```
+
+**Note**: Service Providers are created in a stopped state. You must activate them using the activation endpoint before they can be used by handlers.
 
 **Request Body:**
 
@@ -118,13 +124,15 @@ Content-Type: application/json
 DELETE /api/services/{id}
 ```
 
-## Activate Service
+## Activate Service Provider
 
-Start the service actor. This spawns an async task that manages connections to the backend service.
+Start the Service Provider actor. This spawns an async task that establishes and manages connections to the backend service. The Service Provider becomes available for use by handlers after activation.
 
 ```bash
 POST /api/services/{id}/activate
 ```
+
+**Note**: Only activated Service Providers can be used by endpoint handlers. If a handler tries to use a non-activated Service Provider, it will receive a `ServiceNotAvailable` error.
 
 **Response:**
 
@@ -272,6 +280,127 @@ DELETE /api/minio/objects/uploads/myfile.txt
   "deleted": true
 }
 ```
+
+## Using Service Providers in Handlers
+
+Once a Service Provider is created and activated, it can be used in endpoint handlers via the Context API:
+
+### Database Service Provider Example
+
+```rust
+use rust_edge_gateway_sdk::prelude::*;
+
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    // Get the database service by name
+    let db = ctx.services.database("main-db").await?;
+    
+    // Execute a query
+    let users = db.query(
+        "SELECT id, name FROM users WHERE active = $1",
+        &[&true]
+    ).await?;
+    
+    Ok(Response::ok(json!({"users": users})))
+});
+```
+
+### Cache Service Provider Example
+
+```rust
+use rust_edge_gateway_sdk::prelude::*;
+
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    // Get the cache service by name
+    let cache = ctx.services.cache("session-cache").await?;
+    
+    // Try to get from cache
+    if let Some(cached_data) = cache.get("user:123").await? {
+        return Ok(Response::ok(json!({"source": "cache", "data": cached_data})));
+    }
+    
+    // Cache miss - fetch from database
+    let db = ctx.services.database("main-db").await?;
+    let user = db.query_one("SELECT * FROM users WHERE id = $1", &[&123]).await?;
+    
+    // Store in cache with 300 second TTL
+    cache.set("user:123", &user, 300).await?;
+    
+    Ok(Response::ok(json!({"source": "db", "data": user})))
+});
+```
+
+### Storage Service Provider Example
+
+```rust
+use rust_edge_gateway_sdk::prelude::*;
+
+handler_result!(async fn handle(ctx: &Context, req: Request) -> Result<Response, HandlerError> {
+    // Get the storage service by name
+    let storage = ctx.services.storage("file-storage").await?;
+    
+    // Upload file
+    let file_data = req.body_bytes();
+    storage.put("uploads/file.txt", file_data, "application/octet-stream").await?;
+    
+    // Generate presigned URL
+    let download_url = storage.presigned_url("uploads/file.txt", 3600).await?;
+    
+    Ok(Response::ok(json!({"download_url": download_url})))
+});
+```
+
+## Service Provider Lifecycle
+
+Service Providers follow this lifecycle:
+
+1. **Created**: Service Provider is configured and stored in database
+2. **Activated**: Service Provider actor is spawned and connections are established
+3. **Available**: Service Provider is ready for use by handlers
+4. **Deactivated**: Service Provider actor is stopped gracefully
+5. **Deleted**: Service Provider is removed from database
+
+## Error Handling
+
+### Service Provider Not Found
+
+If a handler tries to use a Service Provider that doesn't exist:
+
+```json
+{
+  "success": false,
+  "error": "ServiceProviderNotFound: main-db"
+}
+```
+
+### Service Provider Not Activated
+
+If a handler tries to use a Service Provider that hasn't been activated:
+
+```json
+{
+  "success": false,
+  "error": "ServiceProviderNotActivated: main-db"
+}
+```
+
+### Service Provider Connection Failed
+
+If a Service Provider fails to connect to the backend service:
+
+```json
+{
+  "success": false,
+  "error": "ServiceProviderConnectionFailed: main-db - Connection refused"
+}
+```
+
+## Best Practices
+
+1. **Name Services Clearly**: Use descriptive names like `main-db`, `session-cache`, `file-storage`
+2. **Activate Before Use**: Always activate Service Providers before creating endpoints that depend on them
+3. **Handle Errors Gracefully**: Implement proper error handling for Service Provider failures
+4. **Monitor Connections**: Use the test endpoint to verify Service Provider health
+5. **Clean Up Unused Services**: Deactivate and delete Service Providers that are no longer needed
 
 ## Service Configuration Examples
 

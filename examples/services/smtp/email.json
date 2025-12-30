@@ -1,0 +1,19 @@
+{
+  "name": "Notification Service",
+  "service_type": "email",
+  "config": {
+    "host": "smtp.example.com",
+    "port": 587,
+    "username": "noreply@example.com",
+    "password": "app-password",
+    "encryption": "starttls",
+    "from_address": "noreply@example.com",
+    "from_name": "My Application",
+    "reply_to": "support@example.com",
+    "timeout_seconds": 30,
+    "max_retries": 3,
+    "retry_delay": 1000
+  },
+  "enabled": true,
+  "description": "SMTP email service for sending notifications and alerts"
+}
