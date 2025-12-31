@@ -33,8 +33,8 @@ Write-Host "Target Domain: $env:TARGET_DOMAIN"
 Write-Host "API Key: $($API_KEY.Substring(0, 8))..."
 Write-Host ""
 
-# Read the handler code
-$handlerCode = Get-Content -Path "examples\hello-world\handler.rs" -Raw
+# Read the handler code as a single string
+$handlerCode = [string](Get-Content -Path "examples\hello-world\handler.rs" -Raw)
 
 # Step 1: Create Domain (if it doesn't exist)
 Write-Host "Step 1: Creating domain 'api'..." -ForegroundColor Cyan
@@ -43,17 +43,22 @@ $domainData = @{
     name = "api"
     host = $env:TARGET_DOMAIN
     description = "API Domain"
-} | ConvertTo-Json -Depth 10
+} | ConvertTo-Json -Compress
 
 try {
     $domainResponse = Invoke-RestMethod -Uri "$BASE_URL/api/domains" -Method Post -Headers @{"Authorization" = "Bearer $API_KEY"; "Content-Type" = "application/json"} -Body $domainData -ErrorAction Stop
-    
-    $domainId = $domainResponse.data.id
-    Write-Host "Domain created successfully. ID: $domainId" -ForegroundColor Green
+
+    if ($domainResponse.success -eq $true -and $domainResponse.data) {
+        $domainId = $domainResponse.data.id
+        Write-Host "Domain created successfully. ID: $domainId" -ForegroundColor Green
+    } else {
+        # Creation failed - might already exist
+        throw "Domain creation returned: $($domainResponse | ConvertTo-Json -Compress)"
+    }
 } catch {
     # Check if domain already exists
     $existingDomains = Invoke-RestMethod -Uri "$BASE_URL/api/domains" -Method Get -Headers @{"Authorization" = "Bearer $API_KEY"} -ErrorAction Stop
-    
+
     $domain = $existingDomains.data | Where-Object { $_.name -eq "api" }
     if ($domain) {
         $domainId = $domain.id
@@ -73,7 +78,7 @@ $collectionData = @{
     name = "hello-world"
     description = "Hello World Collection"
     base_path = "/api"
-} | ConvertTo-Json -Depth 10
+} | ConvertTo-Json -Compress
 
 try {
     $collectionResponse = Invoke-RestMethod -Uri "$BASE_URL/api/collections" -Method Post -Headers @{"Authorization" = "Bearer $API_KEY"; "Content-Type" = "application/json"} -Body $collectionData -ErrorAction Stop
@@ -106,7 +111,7 @@ $endpointData = @{
     method = "GET"
     description = "Hello World API Endpoint"
     code = $handlerCode
-} | ConvertTo-Json -Depth 10
+} | ConvertTo-Json -Compress
 
 try {
     $endpointResponse = Invoke-RestMethod -Uri "$BASE_URL/api/endpoints" -Method Post -Headers @{"Authorization" = "Bearer $API_KEY"; "Content-Type" = "application/json"} -Body $endpointData -ErrorAction Stop
@@ -126,7 +131,7 @@ try {
         Write-Host "Updating endpoint code..." -ForegroundColor Cyan
         $updateCodeData = @{
             code = $handlerCode
-        } | ConvertTo-Json -Depth 10
+        } | ConvertTo-Json -Compress
         
         Invoke-RestMethod -Uri "$BASE_URL/api/endpoints/$endpointId/code" -Method Put -Headers @{"Authorization" = "Bearer $API_KEY"; "Content-Type" = "application/json"} -Body $updateCodeData -ErrorAction Stop | Out-Null
         
