@@ -31,15 +31,15 @@ Write-Host "Step 2: Restarting container..." -ForegroundColor Cyan
 $restartCommands = @"
 cd /opt/rust-edge-gateway
 echo 'Stopping container...'
-docker-compose down
+podman-compose down
 echo 'Starting container with new environment...'
-docker-compose up -d
+podman-compose up -d
 sleep 5
 echo 'Container status:'
-docker-compose ps
+podman-compose ps
 echo ''
 echo 'Recent logs:'
-docker-compose logs --tail 20
+podman-compose logs --tail 20
 "@
 
 ssh -i $SSH_KEY_PATH root@$env:DEPLOY_SERVER_IP $restartCommands

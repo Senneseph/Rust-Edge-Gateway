@@ -62,15 +62,15 @@ cd /opt/rust-edge-gateway
 
 # Stop existing containers
 echo 'Stopping existing containers...'
-docker-compose down || true
+podman-compose down || true
 
 # Pull latest image from Docker Hub
 echo 'Pulling image from Docker Hub...'
-docker pull $env:DOCKER_HUB_USERNAME/rust-edge-gateway:$Version
+podman pull $env:DOCKER_HUB_USERNAME/rust-edge-gateway:$Version
 
 # Start containers
 echo 'Starting containers...'
-docker-compose up -d
+podman-compose up -d
 
 # Wait for services to start
 echo 'Waiting for services to start...'
@@ -79,11 +79,11 @@ sleep 10
 # Show status
 echo ''
 echo 'Container status:'
-docker-compose ps
+podman-compose ps
 
 echo ''
 echo 'Recent logs:'
-docker-compose logs --tail 30
+podman-compose logs --tail 30
 
 # Health check
 echo ''

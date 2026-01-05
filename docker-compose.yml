@@ -25,6 +25,16 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+    # Podman-specific optimizations
+    security_opt:
+      - label=disable
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
 
 volumes:
   cargo-registry:

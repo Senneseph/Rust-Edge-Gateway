@@ -17,9 +17,11 @@
         reverse_proxy rust-edge-gateway:8081
     }
     
-    # Documentation (served from docs container or static files)
+    # Documentation (served from static files)
     handle /docs/* {
-        reverse_proxy docs:3000
+        root * ./docs/book
+        try_files {path} /docs/index.html
+        file_server
     }
     
     # All other requests go to the gateway
@@ -37,6 +39,26 @@
     }
     
     # Logging
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Documentation site
+{$DOCS_DOMAIN} {
+    root * ./docs/book
+    try_files {path} /index.html
+    file_server
+    
+    tls admin@{$TARGET_DOMAIN}
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Content-Security-Policy "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'"
+    }
+    
     log {
         output stdout
         format console

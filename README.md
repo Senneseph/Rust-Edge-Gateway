@@ -22,7 +22,7 @@ Full documentation is available at **[docs.$env:DOCS_DOMAIN](https://docs.$env:D
 
 ## 🚀 Quick Start
 
-### Option 1: Docker (Recommended)
+### Option 1: Podman (Recommended)
 
 ```bash
 # Clone the repository
@@ -30,7 +30,7 @@ git clone https://github.com/Senneseph/rust-edge-gateway.git
 cd rust-edge-gateway
 
 # Start the gateway (includes live-sqlite container)
-docker-compose up -d
+podman-compose up -d
 
 # Access the Admin UI
 open http://localhost:9081/admin/
@@ -46,10 +46,10 @@ cargo build --release --bin rust-edge-gateway
 ./target/release/rust-edge-gateway
 ```
 
-### Option 3: Docker Production Image
+### Option 3: Podman Production Image
 
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+podman-compose -f docker-compose.prod.yml up -d
 ```
 
 ## ⚙️ Configuration
@@ -299,6 +299,56 @@ curl -X POST "http://localhost:8081/api/import/bundle?domain=api.example.com&com
 - **Handler Registry**: Loads dynamic libraries (.so/.dll) with atomic hot-swapping
 - **Service Actors**: Async tasks managing backend connections via message-passing
 - **Graceful Draining**: In-flight requests complete before handler unload
+
+## 🐳 Podman Migration
+
+This project has been migrated from Docker to Podman. Podman is a daemonless, rootless container engine that is fully compatible with Docker images and commands.
+
+### Key Changes
+
+- **Build commands**: Use `podman build` instead of `docker build`
+- **Compose commands**: Use `podman-compose` instead of `docker-compose`
+- **Runtime commands**: Use `podman run`, `podman pull`, `podman push` instead of Docker equivalents
+- **Deployment scripts**: All scripts have been updated to use Podman commands
+
+### Benefits of Podman
+
+- **Daemonless**: No background service required
+- **Rootless**: Can run containers as non-root user
+- **Docker-compatible**: Works with existing Docker images and Docker Hub
+- **Security**: Better isolation and security model
+
+### Installation
+
+```bash
+# Install Podman
+# On Ubuntu/Debian:
+sudo apt-get install podman
+
+# On macOS:
+brew install podman
+
+# Install podman-compose
+pip install podman-compose
+```
+
+### Usage
+
+All existing Docker commands work with Podman:
+
+```bash
+# Build image
+podman build -t my-image .
+
+# Run container
+podman run -d -p 8080:8080 my-image
+
+# Use compose
+podman-compose up -d
+
+# Push to Docker Hub
+podman push my-image:latest docker.io/username/my-image:latest
+```
 
 ## 🧪 Development
 
