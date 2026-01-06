@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+    <!-- Background circle -->
+    <circle cx="128" cy="128" r="128" fill="#DEA584"/>
+    
+    <!-- Main circle with smaller circle cut out from top -->
+    <g transform="translate(0, 0)">
+        <!-- Big circle -->
+        <circle cx="128" cy="128" r="100" fill="#1a1a1a"/>
+        
+        <!-- Smaller circle cut out from top (1/5th size) -->
+        <circle cx="128" cy="60" r="20" fill="#DEA584"/>
+    </g>
+</svg>
