@@ -60,17 +60,25 @@ Write-Host "Step 3: Deploying on droplet..." -ForegroundColor Cyan
 $deployCommands = @"
 cd /opt/rust-edge-gateway
 
+# Load environment variables
+echo 'Loading environment variables...'
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+
 # Stop existing containers
 echo 'Stopping existing containers...'
-podman-compose down || true
+docker-compose down || true
 
 # Pull latest image from Docker Hub
 echo 'Pulling image from Docker Hub...'
-podman pull $env:DOCKER_HUB_USERNAME/rust-edge-gateway:$Version
+docker pull $DOCKER_HUB_USERNAME/rust-edge-gateway:$Version
 
 # Start containers
 echo 'Starting containers...'
-podman-compose up -d
+docker-compose up -d
 
 # Wait for services to start
 echo 'Waiting for services to start...'
@@ -79,11 +87,11 @@ sleep 10
 # Show status
 echo ''
 echo 'Container status:'
-podman-compose ps
+docker-compose ps
 
 echo ''
 echo 'Recent logs:'
-podman-compose logs --tail 30
+docker-compose logs --tail 30
 
 # Health check
 echo ''
@@ -92,7 +100,11 @@ curl -s -o /dev/null -w 'Admin UI (8081): HTTP %{http_code}\n' http://localhost:
 curl -s -o /dev/null -w 'Gateway (8080): HTTP %{http_code}\n' http://localhost:8080/health || echo 'Gateway: Not responding'
 "@
 
-ssh -i $SSH_KEY_PATH root@$env:DEPLOY_SERVER_IP $deployCommands
+# Replace PowerShell variables with their values for SSH
+$deployCommands = $deployCommands -replace '\$DOCKER_HUB_USERNAME', $env:DOCKER_HUB_USERNAME
+$deployCommands = $deployCommands -replace '\$Version', $Version
+
+ssh -i $SSH_KEY_PATH root@$env:DEPLOY_SERVER_IP "$deployCommands"
 
 Write-Host ""
 Write-Host "=== Deployment Complete ===" -ForegroundColor Green

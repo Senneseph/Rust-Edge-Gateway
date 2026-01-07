@@ -10,6 +10,10 @@ use axum::{
     routing::{any, get},
     Router,
 };
+use axum::extract::Path;
+use std::fs;
+use std::path::PathBuf;
+use tower_http::services::ServeDir;
 use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
@@ -21,9 +25,20 @@ use crate::AppState;
 /// The gateway does NOT require API key authentication - it just routes requests
 /// to compiled handlers. Any authentication/authorization is the responsibility
 /// of the individual handlers themselves.
-pub fn create_gateway_router(_state: Arc<AppState>) -> Router<Arc<AppState>> {
+pub fn create_gateway_router(state: Arc<AppState>) -> Router<Arc<AppState>> {
     Router::new()
         .route("/health", get(health_check))
+        // Static file routes must come before catch-all routes
+        .route("/favicon.ico", get(serve_static_file))
+        .route("/favicon.png", get(serve_static_file))
+        .route("/favicon.svg", get(serve_static_file))
+        .route("/apple-touch-icon.png", get(serve_static_file))
+        .route("/favicon-192x192.png", get(serve_static_file))
+        .route("/favicon-512x512.png", get(serve_static_file))
+        .route("/robots.txt", get(serve_static_file))
+        .route("/site.webmanifest", get(serve_static_file))
+        .nest_service("/static", ServeDir::new(&state.config.static_dir))
+        // Catch-all routes must come last
         .route("/{*path}", any(handle_gateway_request))
         .route("/", any(handle_gateway_request))
 }
@@ -31,6 +46,48 @@ pub fn create_gateway_router(_state: Arc<AppState>) -> Router<Arc<AppState>> {
 /// Health check endpoint for the gateway
 async fn health_check() -> impl IntoResponse {
     (StatusCode::OK, "OK")
+}
+
+/// Serve static files from the static directory
+async fn serve_static_file(
+    State(state): State<Arc<AppState>>,
+    Path(filename): Path<String>,
+) -> impl IntoResponse {
+    let static_path = PathBuf::from(&state.config.static_dir).join(&filename);
+    
+    tracing::debug!("Attempting to serve static file: {} (path: {})", filename, static_path.display());
+    
+    if static_path.exists() {
+        tracing::debug!("File found, reading content");
+        match fs::read(static_path) {
+            Ok(content) => {
+                // Determine content type based on file extension
+                let content_type = match filename.to_lowercase().as_str() {
+                    _ if filename.ends_with(".ico") => "image/x-icon",
+                    _ if filename.ends_with(".png") => "image/png",
+                    _ if filename.ends_with(".svg") => "image/svg+xml",
+                    _ if filename.ends_with(".txt") => "text/plain",
+                    _ if filename.ends_with(".webmanifest") => "application/manifest+json",
+                    _ => "application/octet-stream",
+                };
+                
+                tracing::debug!("Serving file {} with content type {}", filename, content_type);
+                
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header("Content-Type", content_type)
+                    .body(Body::from(content))
+                    .unwrap_or_else(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build response").into_response())
+            }
+            Err(e) => {
+                tracing::error!("Failed to read file {}: {}", filename, e);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read file").into_response()
+            }
+        }
+    } else {
+        tracing::warn!("Static file not found: {} (looked at: {})", filename, static_path.display());
+        (StatusCode::NOT_FOUND, "File not found").into_response()
+    }
 }
 
 /// Handle an incoming gateway request using v2 handler registry

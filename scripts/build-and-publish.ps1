@@ -30,37 +30,37 @@ Write-Host "Docker Hub User: $env:DOCKER_HUB_USERNAME"
 Write-Host "Version: $Version"
 Write-Host ""
 
-# Step 1: Build the Podman image
-    Write-Host "Step 1: Building Podman image..." -ForegroundColor Cyan
-    podman build -f Dockerfile.prod -t rust-edge-gateway:$Version .
+# Step 1: Build the Docker image
+Write-Host "Step 1: Building Docker image..." -ForegroundColor Cyan
+docker build -f Dockerfile.prod -t rust-edge-gateway:$Version .
 
 # Step 2: Tag for Docker Hub
     Write-Host ""
     Write-Host "Step 2: Tagging image for Docker Hub..." -ForegroundColor Cyan
-    podman tag rust-edge-gateway:$Version "$env:DOCKER_HUB_USERNAME/rust-edge-gateway:$Version"
+    docker tag rust-edge-gateway:$Version "$env:DOCKER_HUB_USERNAME/rust-edge-gateway:$Version"
     
     # Also tag as latest if this is a version tag
     if ($Version -ne "latest") {
-        podman tag rust-edge-gateway:$Version "$env:DOCKER_HUB_USERNAME/rust-edge-gateway:latest"
+        docker tag rust-edge-gateway:$Version "$env:DOCKER_HUB_USERNAME/rust-edge-gateway:latest"
     }
 
 # Step 3: Login to Docker Hub
     Write-Host ""
     Write-Host "Step 3: Logging in to Docker Hub..." -ForegroundColor Cyan
     if ($env:DOCKER_HUB_TOKEN) {
-        $env:DOCKER_HUB_TOKEN | podman login -u $env:DOCKER_HUB_USERNAME --password-stdin docker.io
+        $env:DOCKER_HUB_TOKEN | docker login -u $env:DOCKER_HUB_USERNAME --password-stdin
     } else {
         Write-Host "No DOCKER_HUB_PERSONAL_ACCESS_TOKEN found, attempting interactive login..."
-        podman login -u $env:DOCKER_HUB_USERNAME docker.io
+        docker login -u $env:DOCKER_HUB_USERNAME
     }
 
 # Step 4: Push to Docker Hub
     Write-Host ""
     Write-Host "Step 4: Pushing to Docker Hub..." -ForegroundColor Cyan
-    podman push "$env:DOCKER_HUB_USERNAME/rust-edge-gateway:$Version"
+    docker push "$env:DOCKER_HUB_USERNAME/rust-edge-gateway:$Version"
     
     if ($Version -ne "latest") {
-        podman push "$env:DOCKER_HUB_USERNAME/rust-edge-gateway:latest"
+        docker push "$env:DOCKER_HUB_USERNAME/rust-edge-gateway:latest"
     }
 
 Write-Host ""
